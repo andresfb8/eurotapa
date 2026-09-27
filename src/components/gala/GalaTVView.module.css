@@ -1,0 +1,312 @@
+.galaContainer {
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-6) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: calc(100vh - 80px);
+}
+
+.galaHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: var(--space-3);
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.galaGrid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+/* Scoreboard Column (Clean 27" monitor TV broadcast) */
+.scoreboardCol {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scoreboardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-4) 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.tvScoreRow {
+  background-color: var(--color-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  position: relative;
+  transition: all 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  min-height: 56px;
+}
+
+.tvScoreRow:hover {
+  border-color: var(--border-color-strong);
+}
+
+.tvScoreRowLeader {
+  border-color: #ECD9A5;
+  background-color: #FFFCF2;
+}
+
+.tvScoreRowPulsing {
+  border-color: var(--text-primary);
+  background-color: var(--pastel-yellow-bg);
+  transform: scale(1.02);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  z-index: 10;
+}
+
+/* Rank Badges */
+.tvRankBadge {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.rankBadgeTop1 {
+  background-color: #FBF3DB;
+  color: #956400;
+  border: 1px solid #ECD9A5;
+  font-size: 17px;
+}
+
+.rankBadgeTop2 {
+  background-color: #F2F1ED;
+  color: #444444;
+  border: 1px solid #D6D6D4;
+}
+
+.rankBadgeTop3 {
+  background-color: #FDEEE4;
+  color: #8C532B;
+  border: 1px solid #EAC8B1;
+}
+
+.rankBadgeDefault {
+  background-color: var(--color-canvas);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+}
+
+/* Dish info */
+.tvDishThumb {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-xs);
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--border-subtle);
+}
+
+.tvDishThumbPlaceholder {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-xs);
+  background-color: var(--color-canvas);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-subtle);
+  flex-shrink: 0;
+}
+
+.tvDishInfo {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tvDishTitle {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  line-height: 1.15;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tvChefName {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+/* Points Flash Badge */
+.tvAwardFlash {
+  background-color: var(--text-primary);
+  color: var(--text-inverse);
+  padding: 4px 10px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 800;
+  animation: popIn 300ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes popIn {
+  from { transform: scale(0.6); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* Prominent Score Box (Readable from 27" monitor across the room) */
+.tvScoreBox {
+  background-color: var(--color-canvas);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xs);
+  padding: 6px 14px;
+  min-width: 82px;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.tvScoreNumber {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.tvScoreUnit {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+/* Spotlight Column (Juror on TV broadcast) */
+.spotlightCol {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.spotlightCard {
+  background-color: var(--color-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.voterMetaArea {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: var(--space-4);
+}
+
+.voterAvatar {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-canvas);
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.voterNameHeading {
+  font-size: 1.8rem;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.revealedPointsList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.pointRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background-color: var(--color-canvas-subtle);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xs);
+  font-size: 14px;
+  animation: fadeIn 250ms ease;
+}
+
+.pointRowTop3 {
+  background-color: #FFFDF4;
+  border-color: #ECD9A5;
+  font-weight: 600;
+}
+
+.pointRowMax {
+  background-color: #FBF3DB;
+  border-color: #D4A828;
+  border-width: 1.5px;
+}
+
+.pointsPill {
+  font-family: var(--font-mono);
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: var(--radius-xs);
+  background-color: var(--text-primary);
+  color: var(--text-inverse);
+  font-size: 14px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 1100px) {
+  .galaGrid {
+    grid-template-columns: 1fr;
+  }
+  .spotlightCol {
+    position: static;
+  }
+}

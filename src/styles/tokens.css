@@ -1,0 +1,58 @@
+:root {
+  /* Canvas & Surfaces */
+  --color-canvas: #F7F6F3;
+  --color-canvas-subtle: #FBFBFA;
+  --color-surface: #FFFFFF;
+  --color-surface-hover: #F9F9F8;
+  --color-surface-active: #F2F1ED;
+
+  /* Structural Borders */
+  --border-color: #EAEAEA;
+  --border-color-strong: #D6D6D4;
+  --border-subtle: rgba(0, 0, 0, 0.06);
+
+  /* Typography Colors */
+  --text-primary: #111111;
+  --text-body: #2F3437;
+  --text-muted: #787774;
+  --text-subtle: #9B9A97;
+  --text-inverse: #FFFFFF;
+
+  /* Semantic Pastels (Minimalist-UI Standard) */
+  --pastel-red-bg: #FDEBEC;
+  --pastel-red-text: #9F2F2D;
+  --pastel-blue-bg: #E1F3FE;
+  --pastel-blue-text: #1F6C9F;
+  --pastel-green-bg: #EDF3EC;
+  --pastel-green-text: #346538;
+  --pastel-yellow-bg: #FBF3DB;
+  --pastel-yellow-text: #956400;
+
+  /* Font Families */
+  --font-serif: 'Instrument Serif', 'Newsreader', Georgia, serif;
+  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+  --font-mono: 'Geist Mono', 'SF Mono', Menlo, monospace;
+
+  /* Radii */
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 9999px;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-smooth: 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-rank: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
