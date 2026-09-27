@@ -1,16 +1,28 @@
 import { useState } from 'react';
-import { ContestPhase } from '../types/contest';
+import { ContestPhase, UserRole } from '../types/contest';
 import { RulesModal } from './RulesModal';
 
-export type ActiveTab = 'tv' | 'voting' | 'admin';
+export type AdminViewTab = 'admin' | 'tv';
 
 interface NavigationProps {
-  currentTab: ActiveTab;
-  onTabChange: (tab: ActiveTab) => void;
+  role: UserRole;
+  contestTitle: string;
   phase: ContestPhase;
+  participantName?: string;
+  adminTab?: AdminViewTab;
+  onAdminTabChange?: (tab: AdminViewTab) => void;
+  onLogout: () => void;
 }
 
-export function Navigation({ currentTab, onTabChange, phase }: NavigationProps) {
+export function Navigation({
+  role,
+  contestTitle,
+  phase,
+  participantName,
+  adminTab = 'admin',
+  onAdminTabChange,
+  onLogout
+}: NavigationProps) {
   const [isRulesOpen, setIsRulesOpen] = useState(false);
 
   return (
@@ -19,7 +31,7 @@ export function Navigation({ currentTab, onTabChange, phase }: NavigationProps) 
         style={{
           backgroundColor: 'var(--color-surface)',
           borderBottom: '1px solid var(--border-color)',
-          padding: '12px var(--space-6)',
+          padding: '10px var(--space-6)',
           position: 'sticky',
           top: 0,
           zIndex: 100
@@ -35,11 +47,8 @@ export function Navigation({ currentTab, onTabChange, phase }: NavigationProps) 
             gap: '12px'
           }}
         >
-          {/* Brand identity mark */}
-          <div
-            style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
-            onClick={() => onTabChange('tv')}
-          >
+          {/* Brand mark and contest title */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div
               style={{
                 width: '32px',
@@ -58,65 +67,63 @@ export function Navigation({ currentTab, onTabChange, phase }: NavigationProps) 
               ET
             </div>
             <div>
-              <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.35rem', letterSpacing: '-0.02em', lineHeight: 1 }}>
-                EuroTapa
+              <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.25rem', letterSpacing: '-0.02em', lineHeight: 1 }}>
+                {contestTitle}
               </div>
               <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)' }}>
-                Edición 2026
+                {role === 'superadmin' && 'Panel Superadmin'}
+                {role === 'participant' && `Chef: ${participantName || 'Participante'}`}
+                {role === 'tv' && 'Modo Pantalla TV'}
               </div>
             </div>
           </div>
 
-          {/* View Switcher Pills */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              backgroundColor: 'var(--color-canvas)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '6px',
-              padding: '3px'
-            }}
-          >
-            <button
-              className="btn btn-sm"
+          {/* Superadmin View Switcher (Only visible to superadmin) */}
+          {role === 'superadmin' && onAdminTabChange && (
+            <div
               style={{
-                backgroundColor: currentTab === 'tv' ? 'var(--color-surface)' : 'transparent',
-                border: currentTab === 'tv' ? '1px solid var(--border-color)' : '1px solid transparent',
-                boxShadow: currentTab === 'tv' ? '0 1px 2px rgba(0,0,0,0.03)' : 'none'
+                display: 'flex',
+                alignItems: 'center',
+                backgroundColor: 'var(--color-canvas)',
+                border: '1px solid var(--border-color)',
+                borderRadius: '6px',
+                padding: '3px'
               }}
-              onClick={() => onTabChange('tv')}
             >
-              📺 Modo TV
-            </button>
+              <button
+                type="button"
+                className="btn btn-sm"
+                style={{
+                  backgroundColor: adminTab === 'admin' ? 'var(--color-surface)' : 'transparent',
+                  border: adminTab === 'admin' ? '1px solid var(--border-color)' : '1px solid transparent',
+                  boxShadow: adminTab === 'admin' ? '0 1px 2px rgba(0,0,0,0.03)' : 'none'
+                }}
+                onClick={() => onAdminTabChange('admin')}
+              >
+                ⚙️ Mando Admin
+              </button>
 
-            <button
-              className="btn btn-sm"
-              style={{
-                backgroundColor: currentTab === 'voting' ? 'var(--color-surface)' : 'transparent',
-                border: currentTab === 'voting' ? '1px solid var(--border-color)' : '1px solid transparent',
-                boxShadow: currentTab === 'voting' ? '0 1px 2px rgba(0,0,0,0.03)' : 'none'
-              }}
-              onClick={() => onTabChange('voting')}
-            >
-              📱 Votar (Móvil)
-            </button>
+              <button
+                type="button"
+                className="btn btn-sm"
+                style={{
+                  backgroundColor: adminTab === 'tv' ? 'var(--color-surface)' : 'transparent',
+                  border: adminTab === 'tv' ? '1px solid var(--border-color)' : '1px solid transparent',
+                  boxShadow: adminTab === 'tv' ? '0 1px 2px rgba(0,0,0,0.03)' : 'none'
+                }}
+                onClick={() => onAdminTabChange('tv')}
+              >
+                📺 Ver TV
+              </button>
+            </div>
+          )}
 
-            <button
-              className="btn btn-sm"
-              style={{
-                backgroundColor: currentTab === 'admin' ? 'var(--color-surface)' : 'transparent',
-                border: currentTab === 'admin' ? '1px solid var(--border-color)' : '1px solid transparent',
-                boxShadow: currentTab === 'admin' ? '0 1px 2px rgba(0,0,0,0.03)' : 'none'
-              }}
-              onClick={() => onTabChange('admin')}
-            >
-              ⚙️ Admin
-            </button>
-          </div>
-
-          {/* Right side: Normativa Button & Phase */}
+          {/* Right actions: Rules, Phase, Logout */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span className="badge badge-neutral" style={{ fontSize: '11px' }}>
+              Fase: {phase}
+            </span>
+
             <button
               type="button"
               className="btn btn-secondary btn-sm"
@@ -124,35 +131,24 @@ export function Navigation({ currentTab, onTabChange, phase }: NavigationProps) 
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '6px',
-                padding: '5px 10px',
+                gap: '5px',
+                padding: '4px 8px',
                 fontWeight: 600
               }}
               title="Consultar la normativa y reglas del concurso"
             >
-              <span
-                style={{
-                  width: '18px',
-                  height: '18px',
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--text-primary)',
-                  color: 'var(--text-inverse)',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '11px',
-                  fontFamily: 'var(--font-mono)',
-                  fontWeight: 800
-                }}
-              >
-                ?
-              </span>
-              Normativa
+              ? Reglas
             </button>
 
-            <span className="badge badge-neutral">
-              Fase: {phase}
-            </span>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={onLogout}
+              style={{ padding: '4px 10px', fontSize: '12px' }}
+              title="Salir y volver a la pantalla de código"
+            >
+              Salir
+            </button>
           </div>
         </div>
       </header>

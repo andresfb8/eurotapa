@@ -1,0 +1,202 @@
+.authContainer {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: radial-gradient(circle at 50% 20%, #FFFDF9 0%, #F5F1EA 100%);
+}
+
+.authCard {
+  width: 100%;
+  max-width: 440px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 36px 32px;
+  box-shadow: 0 10px 30px rgba(44, 38, 30, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.brandHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+}
+
+.brandLogo {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background-color: var(--text-primary);
+  color: var(--text-inverse);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: -0.05em;
+  box-shadow: 0 4px 12px rgba(28, 25, 23, 0.15);
+}
+
+.title {
+  font-family: var(--font-serif);
+  font-size: 2.2rem;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--text-primary);
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.contestPicker {
+  background-color: var(--color-canvas);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.contestPickerLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.contestSelect {
+  width: 100%;
+  background: transparent;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  outline: none;
+}
+
+.pinInputWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pinLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  justify-content: space-between;
+}
+
+.pinInput {
+  font-family: var(--font-mono);
+  font-size: 1.8rem;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.3em;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border-color);
+  background-color: var(--color-canvas);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.pinInput:focus {
+  border-color: var(--text-primary);
+  background-color: #fff;
+  box-shadow: 0 0 0 3px rgba(28, 25, 23, 0.08);
+  outline: none;
+}
+
+.pinInput::placeholder {
+  letter-spacing: 0.1em;
+  color: #CCC6BE;
+  font-size: 1.4rem;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.submitBtn {
+  width: 100%;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0;
+  color: var(--text-subtle);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background-color: var(--border-subtle);
+}
+
+.secondaryOptions {
+  display: flex;
+  gap: 8px;
+}
+
+.tvBtn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.rulesBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+.demoHints {
+  background-color: var(--color-canvas);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  border-left: 3px solid var(--accent-burgundy);
+}
+
+.demoHints strong {
+  color: var(--text-primary);
+}

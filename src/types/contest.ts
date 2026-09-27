@@ -8,10 +8,18 @@ export type ContestPhase =
 
 export type GalaStep = 'ESPERANDO' | 'REVELANDO_PUNTOS' | 'COMPLETO';
 
+export type UserRole = 'superadmin' | 'participant' | 'tv';
+
+export interface UserSession {
+  role: UserRole;
+  contestId: string;
+  participantId?: string;
+}
+
 export interface Participant {
   id: string;
   name: string;
-  pin: string; // 4-digit code (e.g. "1234")
+  pin: string; // 4-digit code (e.g. "1001")
   dishName: string;
   ingredients: string[];
   description: string;
@@ -49,11 +57,18 @@ export interface GalaState {
 export interface ContestState {
   id: string;
   title: string;
+  code?: string; // Short human-friendly code, e.g. "TAPA26"
   phase: ContestPhase;
   adminPin: string;
   participants: Participant[];
   votes: Record<string, VoteRecord>; // voterId -> VoteRecord
   activeTastingId?: string; // For degustación mode
   gala: GalaState;
+  createdAt?: string;
   updatedAt: string;
+}
+
+export interface MultiContestData {
+  activeContestId: string;
+  contests: Record<string, ContestState>;
 }

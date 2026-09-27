@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useContest } from './services/contestStore';
-import { Navigation, ActiveTab } from './components/Navigation';
+import { Navigation, AdminViewTab } from './components/Navigation';
+import { LoginView } from './components/auth/LoginView';
 import { DrawView } from './components/draw/DrawView';
 import { TastingView } from './components/tasting/TastingView';
 import { VotingView } from './components/voting/VotingView';
@@ -17,11 +18,27 @@ export function App() {
     setActiveTasting,
     nextGalaStep,
     simulateSampleVotes,
-    resetContest
+    resetContest,
+
+    // Multi-contest
+    contestsList,
+    activeContestId,
+    createContest,
+    switchContest,
+    deleteContest,
+    addParticipantToContest,
+    removeParticipantFromContest,
+
+    // Auth & Session
+    session,
+    currentParticipant,
+    loginWithCode,
+    loginAsTV,
+    logout
   } = useContest();
 
-  // Active tab in UI: 'tv' | 'voting' | 'admin'
-  const [activeTab, setActiveTab] = useState<ActiveTab>('tv');
+  // Tab for superadmin: 'admin' or 'tv' preview
+  const [adminTab, setAdminTab] = useState<AdminViewTab>('admin');
 
   // TV View router based on contest state phase
   const renderTVContent = () => {
@@ -106,13 +123,6 @@ export function App() {
                   <polyline points="9 18 15 12 9 6" />
                 </svg>
               </button>
-
-              <button
-                className="btn btn-secondary"
-                onClick={() => setActiveTab('voting')}
-              >
-                Ir a Votar en mi Móvil
-              </button>
             </div>
           </div>
         );
@@ -133,38 +143,124 @@ export function App() {
     }
   };
 
+  // 1. If not logged in -> Portal de Acceso por Código
+  if (!session) {
+    return (
+      <LoginView
+        contests={contestsList}
+        activeContestId={activeContestId}
+        onSelectContest={switchContest}
+        onLoginWithCode={loginWithCode}
+        onLoginAsTV={loginAsTV}
+      />
+    );
+  }
+
+  // 2. If logged in as PARTICIPANT -> Exclusive Chef Portal (Cannot see other tabs or TV)
+  if (session.role === 'participant') {
+    return (
+      <main style={{ minHeight: '100vh', backgroundColor: 'var(--color-canvas)', padding: '20px 0' }}>
+        <VotingView
+          participants={state.participants}
+          currentParticipant={currentParticipant}
+          votes={state.votes}
+          phase={state.phase}
+          onSubmitVote={submitVote}
+          onUpdateParticipant={updateParticipant}
+          onLogout={logout}
+        />
+      </main>
+    );
+  }
+
+  // 3. If logged in as TV -> Large Screen TV View (With discrete exit option)
+  if (session.role === 'tv') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        <header
+          style={{
+            backgroundColor: 'var(--color-surface)',
+            borderBottom: '1px solid var(--border-color)',
+            padding: '8px var(--space-6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '14px', fontWeight: 700 }}>📺 {state.title}</span>
+            <span className="badge badge-neutral" style={{ fontSize: '11px' }}>
+              Fase: {state.phase}
+            </span>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {contestsList.length > 1 && (
+              <select
+                className="input"
+                style={{ padding: '4px 8px', fontSize: '12px' }}
+                value={state.id}
+                onChange={(e) => switchContest(e.target.value)}
+              >
+                {contestsList.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={logout}
+              style={{ fontSize: '11px', padding: '4px 8px' }}
+            >
+              Cerrar TV
+            </button>
+          </div>
+        </header>
+
+        <main style={{ flex: 1 }}>{renderTVContent()}</main>
+      </div>
+    );
+  }
+
+  // 4. If logged in as SUPERADMIN -> Full Multi-Contest Admin Console
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <Navigation
-        currentTab={activeTab}
-        onTabChange={setActiveTab}
+        role="superadmin"
+        contestTitle={state.title}
         phase={state.phase}
+        adminTab={adminTab}
+        onAdminTabChange={setAdminTab}
+        onLogout={logout}
       />
 
       <main style={{ flex: 1 }}>
-        {activeTab === 'tv' && renderTVContent()}
-
-        {activeTab === 'voting' && (
-          <VotingView
-            participants={state.participants}
-            votes={state.votes}
-            phase={state.phase}
-            onSubmitVote={submitVote}
-            onUpdateParticipant={updateParticipant}
-          />
-        )}
-
-        {activeTab === 'admin' && (
+        {adminTab === 'admin' ? (
           <AdminPanel
             state={state}
+            contests={contestsList}
+            onSelectContest={switchContest}
+            onCreateContest={createContest}
+            onDeleteContest={deleteContest}
+            onAddParticipant={addParticipantToContest}
+            onRemoveParticipant={removeParticipantFromContest}
             onSetPhase={setPhase}
             onUpdateParticipant={updateParticipant}
             onSimulateVotes={simulateSampleVotes}
             onReset={resetContest}
+            onOpenTV={() => setAdminTab('tv')}
+            onLogout={logout}
           />
+        ) : (
+          renderTVContent()
         )}
       </main>
     </div>
   );
 }
+
 export default App;

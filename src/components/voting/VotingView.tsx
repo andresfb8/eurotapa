@@ -6,22 +6,26 @@ import styles from './VotingView.module.css';
 
 interface VotingViewProps {
   participants: Participant[];
+  currentParticipant?: Participant | null;
   votes: Record<string, VoteRecord>;
   phase: ContestPhase;
   onSubmitVote: (vote: VoteRecord) => void;
   onUpdateParticipant: (participant: Participant) => void;
+  onLogout?: () => void;
 }
 
 export function VotingView({
   participants,
+  currentParticipant: initialParticipant,
   votes,
   phase,
   onSubmitVote,
-  onUpdateParticipant
+  onUpdateParticipant,
+  onLogout
 }: VotingViewProps) {
-  const [selectedParticipantId, setSelectedParticipantId] = useState<string>('');
-  const [enteredPin, setEnteredPin] = useState<string>('');
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [selectedParticipantId, setSelectedParticipantId] = useState<string>(initialParticipant?.id || '');
+  const [enteredPin, setEnteredPin] = useState<string>(initialParticipant?.pin || '');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!initialParticipant);
   const [authError, setAuthError] = useState<string | null>(null);
 
   // Voting state: targetParticipantId -> points
@@ -30,8 +34,11 @@ export function VotingView({
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
 
-  // Find participant either by selected ID or direct PIN lookup
+  // Find active participant
   const currentParticipant = useMemo(() => {
+    if (initialParticipant) {
+      return participants.find((p) => p.id === initialParticipant.id) || initialParticipant;
+    }
     if (selectedParticipantId) {
       return participants.find((p) => p.id === selectedParticipantId);
     }
@@ -39,7 +46,7 @@ export function VotingView({
       return participants.find((p) => p.pin === enteredPin.trim());
     }
     return undefined;
-  }, [participants, selectedParticipantId, enteredPin]);
+  }, [participants, initialParticipant, selectedParticipantId, enteredPin]);
 
   // Rivals to vote for: all participants EXCEPT the current logged-in participant
   const rivals = useMemo(() => {
@@ -78,7 +85,6 @@ export function VotingView({
       return;
     }
 
-    // Direct PIN lookup or matching selected participant
     let matched = currentParticipant;
     if (!matched) {
       matched = participants.find((p) => p.pin === pin);
@@ -95,6 +101,10 @@ export function VotingView({
   };
 
   const handleLogout = () => {
+    if (onLogout) {
+      onLogout();
+      return;
+    }
     setIsAuthenticated(false);
     setEnteredPin('');
     setSelectedParticipantId('');
@@ -108,7 +118,6 @@ export function VotingView({
       if (isNaN(pts) || pts <= 0) {
         delete next[targetId];
       } else {
-        // If another rival already had this point, remove it from them
         Object.entries(next).forEach(([id, val]) => {
           if (val === pts && id !== targetId) {
             delete next[id];
@@ -134,7 +143,7 @@ export function VotingView({
     }
   };
 
-  // If not logged in: show clean PIN authentication portal
+  // If not authenticated: show fallback login
   if (!isAuthenticated || !currentParticipant) {
     return (
       <div className={styles.votingContainer}>
@@ -182,9 +191,6 @@ export function VotingView({
                 placeholder="Ej: 1001"
                 required
               />
-              <span style={{ fontSize: '12px', color: 'var(--text-subtle)', display: 'block', marginTop: '4px' }}>
-                (Códigos de prueba: 1001 Carlos, 1002 Marta, 1003 Javier...)
-              </span>
             </div>
 
             {authError && (
@@ -222,13 +228,13 @@ export function VotingView({
 
   return (
     <div className={styles.votingContainer}>
-      {/* Participant Header */}
+      {/* Participant Header (Exclusive for this user) */}
       <div className={styles.editTapaCard}>
         <div>
           <span className="badge badge-green">Chef Conectado</span>
           <h2 style={{ fontSize: '1.6rem', marginTop: '4px' }}>{currentParticipant.name}</h2>
           <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            Turno de cocina: <strong>#{currentParticipant.tastingOrder}</strong> • PIN: <span className="mono">{currentParticipant.pin}</span>
+            Turno de cocina: <strong>#{currentParticipant.tastingOrder}</strong> • PIN personal: <span className="mono">{currentParticipant.pin}</span>
           </div>
         </div>
 
@@ -245,8 +251,9 @@ export function VotingView({
             type="button"
             className="btn btn-secondary btn-sm"
             onClick={handleLogout}
+            title="Salir y cambiar de usuario"
           >
-            Salir
+            Cerrar Sesión
           </button>
         </div>
       </div>
@@ -302,7 +309,7 @@ export function VotingView({
               {currentParticipant.dishName || 'Sin título definido'}
             </div>
             <div style={{ fontSize: '13px', color: 'var(--text-body)', marginTop: '4px' }}>
-              {currentParticipant.description || 'Pulsa en "Editar Ficha" para añadir la elaboración.'}
+              {currentParticipant.description || 'Pulsa en "Editar Ficha y Foto" para añadir la elaboración.'}
             </div>
             {currentParticipant.ingredients.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
@@ -331,7 +338,7 @@ export function VotingView({
         </div>
 
         <p style={{ fontSize: '12px', color: 'var(--text-muted)', backgroundColor: 'var(--color-canvas)', padding: '8px 12px', borderRadius: '4px', margin: 0 }}>
-          🔒 <strong>Confidencialidad absoluta:</strong> El organizador y los demás participantes solo ven que has completado la ficha ({isProfileComplete ? 'Completada' : 'Pendiente'}), pero nadie verá el plato hasta que llegue tu turno de cata en la TV.
+          🔒 <strong>Confidencialidad absoluta:</strong> El organizador y los demás participantes solo ven que has completado la ficha ({isProfileComplete ? 'Completada' : 'Pendiente'}), pero nadie verá tu plato ni ingredientes hasta que llegue tu turno de cata en la TV.
         </p>
       </div>
 
@@ -471,7 +478,7 @@ export function VotingView({
           >
             {isVoteComplete
               ? 'Sellar y Enviar mis Puntos'
-              : `Asigna todos los puntos (${Object.keys(assignedScores).length}/${totalRivalsCount})`}
+              : `Asigna todos los puntos (${Object.keys(assignedScores).length}/{totalRivalsCount})`}
           </button>
         </>
       )}
