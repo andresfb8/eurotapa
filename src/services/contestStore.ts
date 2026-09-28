@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { doc, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import {
   ContestState,
@@ -8,9 +8,11 @@ import {
   ContestPhase,
   UserSession,
   UserRole,
-  MultiContestData
+  MultiContestData,
+  RemoteContestSummary
 } from '../types/contest';
 import { INITIAL_CONTEST_STATE } from './mockData';
+import { MASTER_PIN, generateUniquePin } from '../utils/pins';
 
 const MULTI_STORAGE_KEY = 'eurotapa_multicontest_v2';
 const LEGACY_STORAGE_KEY = 'eurotapa_state_v1';
@@ -25,6 +27,12 @@ try {
 } catch {
   // Graceful fallback
 }
+
+/**
+ * A participant device only knows its own contest, so it must never overwrite the global
+ * contest registry (`app_meta/registry`) with that partial list.
+ */
+let registryWritesEnabled = true;
 
 function loadInitialMultiData(): MultiContestData {
   try {
@@ -64,49 +72,8 @@ function loadInitialMultiData(): MultiContestData {
   };
 }
 
-function loadSavedSession(): UserSession | null {
+function loadStoredSession(): UserSession | null {
   try {
-    // 1. Check URL parameters for fast direct link
-    if (typeof window !== 'undefined' && window.location.search) {
-      const params = new URLSearchParams(window.location.search);
-      const urlPin = params.get('pin') || params.get('code');
-      const urlRole = params.get('role');
-      const urlContestId = params.get('c') || params.get('contest');
-
-      if (urlRole === 'tv') {
-        return {
-          role: 'tv',
-          contestId: urlContestId || INITIAL_CONTEST_STATE.id
-        };
-      }
-
-      if (urlPin) {
-        const trimmedPin = urlPin.trim();
-        // If master pin
-        if (trimmedPin === '9999') {
-          return {
-            role: 'superadmin',
-            contestId: urlContestId || INITIAL_CONTEST_STATE.id
-          };
-        }
-
-        // Check if participant
-        const multi = loadInitialMultiData();
-        const contest = urlContestId ? multi.contests[urlContestId] : multi.contests[multi.activeContestId];
-        if (contest) {
-          const matched = contest.participants.find((p) => p.pin === trimmedPin);
-          if (matched) {
-            return {
-              role: 'participant',
-              contestId: contest.id,
-              participantId: matched.id
-            };
-          }
-        }
-      }
-    }
-
-    // 2. Check localStorage session
     const raw = localStorage.getItem(SESSION_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
@@ -120,13 +87,216 @@ function loadSavedSession(): UserSession | null {
   return null;
 }
 
-function persistMultiData(data: MultiContestData): MultiContestData {
+// ==========================================
+// ACCESS LINKS (?c=<contestId>&pin=<pin>)
+// ==========================================
+
+interface UrlAccessParams {
+  pin: string;
+  role: string | null;
+  contestId: string | null;
+}
+
+const URL_ACCESS_KEYS = ['c', 'contest', 'pin', 'code', 'role'];
+const MISSING_CONTEST_ERROR =
+  'Este enlace no apunta a un concurso disponible. Puede que haya sido eliminado.';
+
+function readUrlAccessParams(): UrlAccessParams | null {
+  if (typeof window === 'undefined' || !window.location.search) return null;
+  const params = new URLSearchParams(window.location.search);
+  return {
+    pin: (params.get('pin') || params.get('code') || '').trim(),
+    role: params.get('role'),
+    contestId: params.get('c') || params.get('contest')
+  };
+}
+
+function hasUrlAccessParams(params: UrlAccessParams | null): boolean {
+  return !!params && (!!params.pin || !!params.role || !!params.contestId);
+}
+
+/** Removes the access params from the address bar so the PIN is not left visible nor re-used on reload. */
+function clearUrlAccessParams(): void {
+  if (typeof window === 'undefined' || !window.location.search) return;
+  const url = new URL(window.location.href);
+  let changed = false;
+  URL_ACCESS_KEYS.forEach((key) => {
+    if (url.searchParams.has(key)) {
+      url.searchParams.delete(key);
+      changed = true;
+    }
+  });
+  if (!changed) return;
+  const query = url.searchParams.toString();
+  window.history.replaceState({}, '', `${url.pathname}${query ? `?${query}` : ''}${url.hash}`);
+}
+
+function hadLocalMultiData(): boolean {
+  try {
+    return !!localStorage.getItem(MULTI_STORAGE_KEY) || !!localStorage.getItem(LEGACY_STORAGE_KEY);
+  } catch {
+    return false;
+  }
+}
+
+async function fetchContestFromCloud(contestId: string): Promise<ContestState | null> {
+  try {
+    const snapshot = await getDoc(doc(db, 'concursos', contestId));
+    if (!snapshot.exists()) return null;
+    const data = snapshot.data() as ContestState;
+    if (!data || !data.id || !Array.isArray(data.participants)) return null;
+    return data;
+  } catch (e) {
+    console.warn('No se pudo cargar el concurso desde Firestore:', e);
+    return null;
+  }
+}
+
+interface BootstrapResult {
+  multi: MultiContestData;
+  session: UserSession | null;
+  error: string | null;
+  injectedContest: boolean;
+}
+
+async function resolveAccessFromUrl(
+  params: UrlAccessParams,
+  base: MultiContestData,
+  storedSession: UserSession | null
+): Promise<BootstrapResult> {
+  let multi = base;
+  let injectedContest = false;
+  const requestedId = params.contestId;
+  let contest = requestedId ? base.contests[requestedId] : undefined;
+  let requestedContestMissing = false;
+
+  if (requestedId && !contest) {
+    const fromCloud = await fetchContestFromCloud(requestedId);
+    if (fromCloud) {
+      contest = fromCloud;
+      multi = {
+        activeContestId: fromCloud.id,
+        contests: hadLocalMultiData()
+          ? { ...base.contests, [fromCloud.id]: fromCloud }
+          : { [fromCloud.id]: fromCloud }
+      };
+      injectedContest = true;
+    } else {
+      requestedContestMissing = true;
+    }
+  } else if (requestedId && contest) {
+    multi = { ...base, activeContestId: contest.id };
+  }
+
+  if (params.role === 'tv') {
+    return {
+      multi,
+      session: { role: 'tv', contestId: contest?.id || multi.activeContestId },
+      error: requestedContestMissing ? MISSING_CONTEST_ERROR : null,
+      injectedContest
+    };
+  }
+
+  if (!params.pin) {
+    return {
+      multi,
+      session: storedSession,
+      error: requestedContestMissing ? MISSING_CONTEST_ERROR : null,
+      injectedContest
+    };
+  }
+
+  if (params.pin === MASTER_PIN) {
+    return {
+      multi,
+      session: { role: 'superadmin', contestId: contest?.id || multi.activeContestId },
+      error: null,
+      injectedContest
+    };
+  }
+
+  if (contest) {
+    const matched = contest.participants.find((p) => p.pin === params.pin);
+    if (matched) {
+      return {
+        multi,
+        session: { role: 'participant', contestId: contest.id, participantId: matched.id },
+        error: null,
+        injectedContest
+      };
+    }
+    return {
+      multi,
+      session: null,
+      error: `El PIN ${params.pin} no pertenece a "${contest.title}". Pide a la organización que te reenvíe tu enlace.`,
+      injectedContest
+    };
+  }
+
+  const matches = Object.values(multi.contests).flatMap((c) => {
+    const participant = c.participants.find((p) => p.pin === params.pin);
+    return participant ? [{ contest: c, participant }] : [];
+  });
+
+  if (matches.length === 1) {
+    const match = matches[0];
+    return {
+      multi,
+      session: { role: 'participant', contestId: match.contest.id, participantId: match.participant.id },
+      error: null,
+      injectedContest
+    };
+  }
+
+  if (matches.length > 1) {
+    return {
+      multi,
+      session: null,
+      error: 'Ese PIN existe en varios concursos. Elige tu concurso en la lista y vuelve a intentarlo.',
+      injectedContest
+    };
+  }
+
+  return {
+    multi,
+    session: null,
+    error: requestedContestMissing
+      ? MISSING_CONTEST_ERROR
+      : 'Código no reconocido. Comprueba el código o solicita ayuda al organizador.',
+    injectedContest
+  };
+}
+
+// Access params are read and consumed once, before React mounts, so the deep link
+// survives StrictMode's double effect invocation and the PIN leaves the address bar.
+const initialUrlAccessParams = readUrlAccessParams();
+const initialBootstrapRequested = hasUrlAccessParams(initialUrlAccessParams);
+if (initialBootstrapRequested) {
+  clearUrlAccessParams();
+}
+const initialBootstrapPromise: Promise<BootstrapResult> | null = initialBootstrapRequested
+  ? resolveAccessFromUrl(
+      initialUrlAccessParams as UrlAccessParams,
+      loadInitialMultiData(),
+      loadStoredSession()
+    )
+  : null;
+
+/** Local-only cache (localStorage + cross-tab broadcast). */
+function cacheMultiLocal(data: MultiContestData): MultiContestData {
   try {
     localStorage.setItem(MULTI_STORAGE_KEY, JSON.stringify(data));
     if (broadcastChannel) {
       broadcastChannel.postMessage({ type: 'MULTI_UPDATE', data });
     }
+  } catch (e) {
+    console.warn('Error caching multi data:', e);
+  }
+  return data;
+}
 
+function syncMultiToCloud(data: MultiContestData): void {
+  try {
     // Async sync active contest to Firestore
     const active = data.contests[data.activeContestId];
     if (active) {
@@ -136,28 +306,36 @@ function persistMultiData(data: MultiContestData): MultiContestData {
       });
     }
 
-    // Also persist registry list
-    const registryRef = doc(db, 'app_meta', 'registry');
-    const contestSummaries = Object.values(data.contests).map((c) => ({
-      id: c.id,
-      title: c.title,
-      code: c.code || '',
-      phase: c.phase,
-      participantsCount: c.participants.length,
-      updatedAt: c.updatedAt
-    }));
-    setDoc(registryRef, { contests: contestSummaries, activeContestId: data.activeContestId }, { merge: true }).catch(() => {});
-
-    return data;
+    // Also persist registry list (organiser devices only)
+    if (registryWritesEnabled) {
+      const registryRef = doc(db, 'app_meta', 'registry');
+      const contestSummaries = Object.values(data.contests).map((c) => ({
+        id: c.id,
+        title: c.title,
+        code: c.code || '',
+        phase: c.phase,
+        participantsCount: c.participants.length,
+        updatedAt: c.updatedAt
+      }));
+      setDoc(registryRef, { contests: contestSummaries, activeContestId: data.activeContestId }, { merge: true }).catch(() => {});
+    }
   } catch (e) {
-    console.warn('Error persisting multi data:', e);
-    return data;
+    console.warn('Error syncing multi data to Firestore:', e);
   }
+}
+
+function persistMultiData(data: MultiContestData): MultiContestData {
+  cacheMultiLocal(data);
+  syncMultiToCloud(data);
+  return data;
 }
 
 export function useContest() {
   const [multiData, setMultiData] = useState<MultiContestData>(loadInitialMultiData);
-  const [session, setSession] = useState<UserSession | null>(loadSavedSession);
+  const [session, setSession] = useState<UserSession | null>(loadStoredSession);
+  const [remoteContests, setRemoteContests] = useState<RemoteContestSummary[]>([]);
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+  const [booting, setBooting] = useState<boolean>(() => !!initialBootstrapPromise);
 
   // Active contest is either from session contestId or activeContestId
   const activeContestId = session?.contestId || multiData.activeContestId;
@@ -176,6 +354,64 @@ export function useContest() {
       // ignore
     }
   }, []);
+
+  // 0. Deep link bootstrap: resolve the contest and the session carried by the access URL
+  useEffect(() => {
+    if (!initialBootstrapPromise) return;
+    let cancelled = false;
+
+    initialBootstrapPromise
+      .then((result) => {
+        if (cancelled) return;
+        setMultiData(result.multi);
+        if (result.injectedContest) {
+          cacheMultiLocal(result.multi);
+        }
+        if (result.session) {
+          saveSession(result.session);
+        }
+        setBootstrapError(result.error);
+        setBooting(false);
+      })
+      .catch((error) => {
+        console.warn('Error resolviendo el enlace de acceso:', error);
+        if (cancelled) return;
+        setBootstrapError('No se pudo abrir el enlace de acceso. Comprueba tu conexión e inténtalo de nuevo.');
+        setBooting(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [saveSession]);
+
+  // 0b. Contest registry: lets a fresh device list contests that are not cached locally yet
+  useEffect(() => {
+    if (session) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const snapshot = await getDoc(doc(db, 'app_meta', 'registry'));
+        if (cancelled || !snapshot.exists()) return;
+        const data = snapshot.data() as { contests?: RemoteContestSummary[] };
+        if (Array.isArray(data.contests)) {
+          setRemoteContests(data.contests);
+        }
+      } catch (error) {
+        console.warn('No se pudo leer el registro de concursos:', error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
+
+  // 0c. Only organiser devices may rewrite the global contest registry
+  useEffect(() => {
+    registryWritesEnabled = session?.role !== 'participant';
+  }, [session]);
 
   // Listeners: Firestore & Cross-Tab Broadcast & Window Storage
   useEffect(() => {
@@ -449,33 +685,46 @@ export function useContest() {
     (
       title: string,
       code?: string,
-      adminPin: string = '9999',
+      adminPin: string = MASTER_PIN,
       initialParticipants: { name: string; pin: string }[] = []
     ) => {
       const contestId = 'contest_' + Date.now().toString(36);
       const cleanCode = (code || title.substring(0, 4).toUpperCase() + Math.floor(10 + Math.random() * 90)).trim().toUpperCase();
 
-      const participants: Participant[] = initialParticipants.map((p, idx) => ({
-        id: `p_${idx + 1}_${Date.now().toString(36)}`,
-        name: p.name,
-        pin: p.pin || (1001 + idx).toString(),
-        dishName: '',
-        ingredients: [],
-        description: '',
-        tastingOrder: idx + 1
-      }));
+      const participants: Participant[] = [];
+      initialParticipants.forEach((p, idx) => {
+        participants.push({
+          id: `p_${idx + 1}_${Date.now().toString(36)}`,
+          name: p.name,
+          pin: generateUniquePin(participants, p.pin),
+          dishName: '',
+          ingredients: [],
+          description: '',
+          tastingOrder: idx + 1
+        });
+      });
+
+      if (participants.length === 0) {
+        ['Participante 1', 'Participante 2', 'Participante 3'].forEach((name, idx) => {
+          participants.push({
+            id: `p_${idx + 1}`,
+            name,
+            pin: generateUniquePin(participants),
+            dishName: '',
+            ingredients: [],
+            description: '',
+            tastingOrder: idx + 1
+          });
+        });
+      }
 
       const newContest: ContestState = {
         id: contestId,
         title: title.trim() || 'Nuevo Concurso de Tapas',
         code: cleanCode,
         phase: 'CONFIGURACION',
-        adminPin: adminPin.trim() || '9999',
-        participants: participants.length > 0 ? participants : [
-          { id: 'p_1', name: 'Participante 1', pin: '1001', dishName: '', ingredients: [], description: '', tastingOrder: 1 },
-          { id: 'p_2', name: 'Participante 2', pin: '1002', dishName: '', ingredients: [], description: '', tastingOrder: 2 },
-          { id: 'p_3', name: 'Participante 3', pin: '1003', dishName: '', ingredients: [], description: '', tastingOrder: 3 },
-        ],
+        adminPin: adminPin.trim() || MASTER_PIN,
+        participants,
         votes: {},
         gala: {
           currentVoterIndex: 0,
@@ -560,7 +809,7 @@ export function useContest() {
         if (!contest) return prev;
 
         const nextOrder = contest.participants.length + 1;
-        const autoPin = pin && pin.trim().length === 4 ? pin.trim() : (1000 + nextOrder).toString();
+        const autoPin = generateUniquePin(contest.participants, pin);
         const newP: Participant = {
           id: `p_${Date.now().toString(36)}`,
           name: name.trim(),
@@ -656,39 +905,48 @@ export function useContest() {
   // ==========================================
 
   const loginWithCode = useCallback(
-    (rawCode: string, targetContestId?: string): { success: boolean; role?: UserRole; error?: string } => {
+    async (rawCode: string, targetContestId?: string): Promise<{ success: boolean; role?: UserRole; error?: string }> => {
       const code = rawCode.trim();
       if (!code) {
         return { success: false, error: 'Por favor introduce un código de acceso.' };
       }
 
+      const effectiveContestId = targetContestId || multiData.activeContestId;
+
       // Check if global TV request
       if (code.toUpperCase() === 'TV' || code.toUpperCase() === 'TELE') {
-        const cid = targetContestId || multiData.activeContestId;
-        const newSession: UserSession = { role: 'tv', contestId: cid };
+        const newSession: UserSession = { role: 'tv', contestId: effectiveContestId };
         saveSession(newSession);
         return { success: true, role: 'tv' };
       }
 
-      // Check if code matches Superadmin Master PIN
-      // 1. Check against active / selected contest adminPin
-      const chosenContest = targetContestId ? multiData.contests[targetContestId] : multiData.contests[multiData.activeContestId];
-      if (chosenContest && chosenContest.adminPin === code) {
-        const newSession: UserSession = { role: 'superadmin', contestId: chosenContest.id };
-        saveSession(newSession);
-        return { success: true, role: 'superadmin' };
+      // Load the selected contest on demand (fresh device, contest not cached yet)
+      let chosenContest = targetContestId ? multiData.contests[targetContestId] : undefined;
+      if (!chosenContest && targetContestId) {
+        chosenContest = (await fetchContestFromCloud(targetContestId)) || undefined;
+        if (chosenContest) {
+          const fetched = chosenContest;
+          setMultiData((prev) =>
+            cacheMultiLocal({
+              ...prev,
+              contests: { ...prev.contests, [fetched.id]: fetched }
+            })
+          );
+        }
       }
 
-      // 2. Check universal default 9999 or any contest's admin pin
-      if (code === '9999' || Object.values(multiData.contests).some((c) => c.adminPin === code)) {
-        const cid = targetContestId || multiData.activeContestId;
-        const newSession: UserSession = { role: 'superadmin', contestId: cid };
-        saveSession(newSession);
-        return { success: true, role: 'superadmin' };
+      if (targetContestId && !chosenContest) {
+        return {
+          success: false,
+          error: 'No hemos podido cargar ese concurso. Comprueba tu conexión e inténtalo de nuevo.'
+        };
       }
 
-      // Check if code is a Participant PIN
-      // First check within the specified / active contest
+      if (!chosenContest) {
+        chosenContest = multiData.contests[multiData.activeContestId];
+      }
+
+      // Check if code is a Participant PIN (participants take priority so an admin PIN can never leak access to them)
       if (chosenContest) {
         const matched = chosenContest.participants.find((p) => p.pin === code);
         if (matched) {
@@ -702,18 +960,43 @@ export function useContest() {
         }
       }
 
-      // If not found in chosen contest, search across ALL contests
-      for (const contest of Object.values(multiData.contests)) {
-        const matched = contest.participants.find((p) => p.pin === code);
-        if (matched) {
-          const newSession: UserSession = {
-            role: 'participant',
-            contestId: contest.id,
-            participantId: matched.id
-          };
-          saveSession(newSession);
-          return { success: true, role: 'participant' };
-        }
+      // Superadmin: universal master PIN or the admin PIN of the selected contest only
+      if (code === MASTER_PIN || (chosenContest && chosenContest.adminPin === code)) {
+        const newSession: UserSession = { role: 'superadmin', contestId: chosenContest?.id || effectiveContestId };
+        saveSession(newSession);
+        return { success: true, role: 'superadmin' };
+      }
+
+      if (targetContestId) {
+        // The contest was selected explicitly (link or picker): never fall back to another contest.
+        return {
+          success: false,
+          error: 'Ese PIN no pertenece al concurso seleccionado. Comprueba el código o elige otro concurso.'
+        };
+      }
+
+      // No contest context: search the cached contests, detecting ambiguous PINs
+      const matches = Object.values(multiData.contests).flatMap((c) => {
+        const participant = c.participants.find((p) => p.pin === code);
+        return participant ? [{ contest: c, participant }] : [];
+      });
+
+      if (matches.length === 1) {
+        const match = matches[0];
+        const newSession: UserSession = {
+          role: 'participant',
+          contestId: match.contest.id,
+          participantId: match.participant.id
+        };
+        saveSession(newSession);
+        return { success: true, role: 'participant' };
+      }
+
+      if (matches.length > 1) {
+        return {
+          success: false,
+          error: 'Ese PIN existe en varios concursos. Elige tu concurso en la lista y vuelve a intentarlo.'
+        };
       }
 
       return {
@@ -771,6 +1054,11 @@ export function useContest() {
     currentParticipant,
     loginWithCode,
     loginAsTV,
-    logout
+    logout,
+
+    // Access link bootstrap
+    booting,
+    bootstrapError,
+    remoteContests
   };
 }

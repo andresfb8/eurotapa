@@ -1,18 +1,22 @@
-import { useState } from 'react';
-import { ContestState } from '../../types/contest';
+import { useEffect, useMemo, useState } from 'react';
+import { ContestState, RemoteContestSummary } from '../../types/contest';
 import { RulesModal } from '../RulesModal';
 import styles from './LoginView.module.css';
 
 interface LoginViewProps {
   contests: ContestState[];
+  remoteContests?: RemoteContestSummary[];
+  initialError?: string | null;
   activeContestId: string;
   onSelectContest: (contestId: string) => void;
-  onLoginWithCode: (code: string, contestId?: string) => { success: boolean; error?: string };
+  onLoginWithCode: (code: string, contestId?: string) => Promise<{ success: boolean; error?: string }>;
   onLoginAsTV: (contestId?: string) => void;
 }
 
 export function LoginView({
   contests,
+  remoteContests,
+  initialError,
   activeContestId,
   onSelectContest,
   onLoginWithCode,
@@ -20,21 +24,53 @@ export function LoginView({
 }: LoginViewProps) {
   const [code, setCode] = useState('');
   const [selectedContestId, setSelectedContestId] = useState(activeContestId);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(initialError ?? null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Contests cached on this device + contests announced by the cloud registry
+  const contestOptions = useMemo(() => {
+    const loadedIds = new Set(contests.map((c) => c.id));
+    const loaded = contests.map((c) => ({
+      id: c.id,
+      label: `${c.title} (${c.participants.length} participantes)`,
+      pending: false
+    }));
+    const pending = (remoteContests || [])
+      .filter((r) => !loadedIds.has(r.id))
+      .map((r) => ({
+        id: r.id,
+        label: `${r.title}${r.participantsCount ? ` (${r.participantsCount} participantes)` : ''}`,
+        pending: true
+      }));
+    return [...loaded, ...pending];
+  }, [contests, remoteContests]);
+
+  useEffect(() => {
+    if (contestOptions.length > 0 && !contestOptions.some((o) => o.id === selectedContestId)) {
+      setSelectedContestId(contestOptions[0].id);
+    }
+  }, [contestOptions, selectedContestId]);
+
+  const selectedOption = contestOptions.find((o) => o.id === selectedContestId);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!code.trim()) {
       setErrorMsg('Por favor introduce tu código de acceso.');
       return;
     }
 
-    const res = onLoginWithCode(code.trim(), selectedContestId);
-    if (!res.success) {
-      setErrorMsg(res.error || 'Código no válido.');
-    } else {
-      setErrorMsg(null);
+    setIsSubmitting(true);
+    try {
+      const res = await onLoginWithCode(code.trim(), selectedContestId || undefined);
+      if (!res.success) {
+        setErrorMsg(res.error || 'Código no válido.');
+      } else {
+        setErrorMsg(null);
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -43,8 +79,6 @@ export function LoginView({
     onSelectContest(newId);
     setErrorMsg(null);
   };
-
-  const activeContest = contests.find((c) => c.id === selectedContestId) || contests[0];
 
   return (
     <div className={styles.authContainer}>
@@ -63,21 +97,22 @@ export function LoginView({
         {/* Contest selector (if multiple contests exist or single informative pill) */}
         <div className={styles.contestPicker}>
           <span className={styles.contestPickerLabel}>Concurso Activo</span>
-          {contests.length > 1 ? (
+          {contestOptions.length > 1 ? (
             <select
               className={styles.contestSelect}
               value={selectedContestId}
               onChange={(e) => handleContestChange(e.target.value)}
             >
-              {contests.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.title} ({c.participants.length} participantes)
+              {contestOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                  {o.pending ? ' — se cargará al entrar' : ''}
                 </option>
               ))}
             </select>
           ) : (
             <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>
-              {activeContest ? activeContest.title : 'EuroTapa 2026'}
+              {selectedOption ? selectedOption.label : 'EuroTapa 2026'}
             </div>
           )}
         </div>
@@ -118,8 +153,8 @@ export function LoginView({
           )}
 
           <div className={styles.actions}>
-            <button type="submit" className={`btn btn-primary ${styles.submitBtn}`}>
-              Entrar al Concurso
+            <button type="submit" className={`btn btn-primary ${styles.submitBtn}`} disabled={isSubmitting}>
+              {isSubmitting ? 'Entrando…' : 'Entrar al Concurso'}
               <svg className="icon" viewBox="0 0 24 24">
                 <polyline points="9 18 15 12 9 6" />
               </svg>

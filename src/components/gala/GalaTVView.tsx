@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Participant, VoteRecord, GalaState, ContestPhase } from '../../types/contest';
 import { calculateScoreboard } from '../../utils/scoring';
-import { ScoreboardBar } from './ScoreboardBar';
+import { ScoreboardList } from './ScoreboardList';
 import { PodiumView } from './PodiumView';
 import styles from './GalaTVView.module.css';
 
@@ -149,16 +149,11 @@ export function GalaTVView({
             <span>Puntos Totales</span>
           </div>
 
-          {scoreboard.map((item) => (
-            <ScoreboardBar
-              key={item.participantId}
-              item={item}
-              isPulsing={gala.lastAwardedTapaId === item.participantId}
-              lastAwardedPoints={
-                gala.lastAwardedTapaId === item.participantId ? gala.lastAwardedPoints : undefined
-              }
-            />
-          ))}
+          <ScoreboardList
+            items={scoreboard}
+            lastAwardedTapaId={gala.lastAwardedTapaId}
+            lastAwardedPoints={gala.lastAwardedPoints}
+          />
         </div>
 
         {/* Right Column: Live Voter Spotlight on TV broadcast */}

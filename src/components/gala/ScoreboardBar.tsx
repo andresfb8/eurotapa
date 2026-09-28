@@ -5,12 +5,23 @@ interface ScoreboardBarProps {
   item: ScoreboardItem;
   isPulsing: boolean;
   lastAwardedPoints?: number;
+  /** Positions gained since the previous reveal (positive = climbed, negative = dropped). */
+  rankDelta?: number;
+  /** Identifies the reorder this delta belongs to, so the indicator restarts on every movement. */
+  motionId?: number;
 }
 
-export function ScoreboardBar({ item, isPulsing, lastAwardedPoints }: ScoreboardBarProps) {
+export function ScoreboardBar({
+  item,
+  isPulsing,
+  lastAwardedPoints,
+  rankDelta,
+  motionId
+}: ScoreboardBarProps) {
   const isTop1 = item.rank === 1;
   const isTop2 = item.rank === 2;
   const isTop3 = item.rank === 3;
+  const hasMoved = !!rankDelta;
 
   const rankBadgeClass = isTop1
     ? styles.rankBadgeTop1
@@ -60,6 +71,25 @@ export function ScoreboardBar({ item, isPulsing, lastAwardedPoints }: Scoreboard
 
       {/* Prominent Score Box (Optimized for 27" monitor reading) */}
       <div className={styles.tvScoreBox}>
+        {hasMoved && rankDelta !== undefined && (
+          <span
+            key={`${motionId}-${rankDelta}`}
+            className={`${styles.tvRankDelta} ${
+              rankDelta > 0 ? styles.tvRankDeltaUp : styles.tvRankDeltaDown
+            }`}
+            role="img"
+            aria-label={
+              rankDelta > 0
+                ? `Sube ${rankDelta} ${rankDelta === 1 ? 'puesto' : 'puestos'}`
+                : `Baja ${Math.abs(rankDelta)} ${Math.abs(rankDelta) === 1 ? 'puesto' : 'puestos'}`
+            }
+          >
+            <svg className={styles.tvRankDeltaIcon} viewBox="0 0 10 8" aria-hidden="true">
+              {rankDelta > 0 ? <path d="M5 0 10 8H0z" /> : <path d="M5 8 0 0h10z" />}
+            </svg>
+            {Math.abs(rankDelta)}
+          </span>
+        )}
         <span className={styles.tvScoreNumber}>{item.totalPoints}</span>
         <span className={styles.tvScoreUnit}>pts</span>
       </div>

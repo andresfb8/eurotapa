@@ -31,10 +31,8 @@ export function CreateContestModal({ onClose, onCreate }: CreateContestModalProp
       .map((l) => l.trim())
       .filter((l) => l.length > 0);
 
-    const participants = lines.map((name, idx) => ({
-      name,
-      pin: (1001 + idx).toString()
-    }));
+    // PINs are assigned by the store, guaranteeing they are unique inside the contest
+    const participants = lines.map((name) => ({ name, pin: '' }));
 
     onCreate(title.trim(), code.trim() || undefined, adminPin.trim() || '9999', participants);
     onClose();
@@ -139,7 +137,7 @@ export function CreateContestModal({ onClose, onCreate }: CreateContestModalProp
               Nombres de los Amigos / Participantes
             </label>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '8px' }}>
-              Escribe un nombre por línea. Se les asignará automáticamente un PIN correlativo (1001, 1002, 1003...). Podrás añadir más o modificarlos luego.
+              Escribe un nombre por línea. A cada participante se le asignará un PIN único de 4 dígitos dentro de este concurso (1001, 1002, 1003...). Podrás añadir más participantes después.
             </span>
             <textarea
               className="input"

@@ -32,6 +32,21 @@
   gap: 8px;
 }
 
+/* Slot that carries the FLIP travel, so the row itself stays a pure card */
+.scoreRowSlot {
+  display: block;
+}
+
+.rowTraveling {
+  z-index: 5;
+  will-change: transform;
+}
+
+.rowTraveling > .tvScoreRow {
+  border-color: var(--border-color-strong);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.07);
+}
+
 .scoreboardHeader {
   display: flex;
   align-items: center;
@@ -186,6 +201,62 @@
   justify-content: center;
   gap: 4px;
   flex-shrink: 0;
+  position: relative;
+}
+
+/* Rank movement indicator: rides on the score box corner so it never shifts the row layout */
+.tvRankDelta {
+  position: absolute;
+  top: -7px;
+  right: -6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 5px;
+  height: 17px;
+  border: 1px solid;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.tvRankDeltaUp {
+  background-color: var(--pastel-green-bg);
+  border-color: #CDE0CC;
+  color: var(--pastel-green-text);
+  animation: rankDeltaRise 2600ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.tvRankDeltaDown {
+  background-color: var(--pastel-red-bg);
+  border-color: #F0CBCE;
+  color: var(--pastel-red-text);
+  animation: rankDeltaDrop 2600ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.tvRankDeltaIcon {
+  width: 8px;
+  height: 6px;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
+/* Enters from the direction the row travelled, holds while the audience reads it, then clears */
+@keyframes rankDeltaRise {
+  0% { opacity: 0; transform: translateY(5px) scale(0.96); }
+  12% { opacity: 1; transform: translateY(0) scale(1); }
+  76% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-3px) scale(1); }
+}
+
+@keyframes rankDeltaDrop {
+  0% { opacity: 0; transform: translateY(-5px) scale(0.96); }
+  12% { opacity: 1; transform: translateY(0) scale(1); }
+  76% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(3px) scale(1); }
 }
 
 .tvScoreNumber {
@@ -309,4 +380,23 @@
   .spotlightCol {
     position: static;
   }
+}
+
+/* Movement is removed, but the position change stays legible */
+@media (prefers-reduced-motion: reduce) {
+  .rowTraveling > .tvScoreRow {
+    box-shadow: none;
+  }
+
+  .tvRankDeltaUp,
+  .tvRankDeltaDown {
+    animation: rankDeltaHold 2600ms linear forwards;
+  }
+}
+
+@keyframes rankDeltaHold {
+  0% { opacity: 0; }
+  8% { opacity: 1; }
+  76% { opacity: 1; }
+  100% { opacity: 0; }
 }

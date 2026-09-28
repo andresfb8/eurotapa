@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ContestState, Participant, ContestPhase } from '../../types/contest';
 import { CreateContestModal } from './CreateContestModal';
+import { buildParticipantLink, buildTvLink, getPublicAppBaseUrl, isLocalOrigin } from '../../utils/appUrl';
 import styles from './AdminPanel.module.css';
 
 interface AdminPanelProps {
@@ -50,9 +51,13 @@ export function AdminPanel({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [newParticipantName, setNewParticipantName] = useState('');
   const [copiedParticipantId, setCopiedParticipantId] = useState<string | null>(null);
+  const [isTvLinkCopied, setIsTvLinkCopied] = useState(false);
 
   const totalParticipants = state.participants.length;
   const votesReceivedCount = Object.keys(state.votes).length;
+
+  const isLocal = isLocalOrigin();
+  const publicBaseUrl = getPublicAppBaseUrl();
 
   const profilesReadyCount = state.participants.filter(
     (p) => !!p.dishName && !!p.photoUrl && p.ingredients.length > 0
@@ -65,9 +70,18 @@ export function AdminPanel({
     setNewParticipantName('');
   };
 
+  const handleCopyTvLink = () => {
+    const link = buildTvLink(state.id);
+    navigator.clipboard.writeText(link).then(() => {
+      setIsTvLinkCopied(true);
+      setTimeout(() => setIsTvLinkCopied(false), 2500);
+    }).catch(() => {
+      prompt('Copia este enlace para abrir la pantalla de TV en otro dispositivo:', link);
+    });
+  };
+
   const handleCopyParticipantLink = (participant: Participant) => {
-    const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const link = `${origin}?c=${state.id}&pin=${participant.pin}`;
+    const link = buildParticipantLink(state.id, participant.pin);
     navigator.clipboard.writeText(link).then(() => {
       setCopiedParticipantId(participant.id);
       setTimeout(() => setCopiedParticipantId(null), 2500);
@@ -110,6 +124,15 @@ export function AdminPanel({
                 📺 Modo TV
               </button>
             )}
+
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={handleCopyTvLink}
+              title="Copiar enlace para abrir la pantalla de TV en otro dispositivo"
+            >
+              {isTvLinkCopied ? '✓ Enlace TV Copiado' : '🔗 Enlace TV'}
+            </button>
 
             <button
               type="button"
@@ -192,6 +215,25 @@ export function AdminPanel({
           </div>
         </div>
       </div>
+
+      {/* Local server notice */}
+      {isLocal && (
+        <div className="card" style={{ backgroundColor: 'var(--pastel-yellow-bg)', borderColor: '#EBD9A6' }}>
+          <div className="flex items-center gap-3">
+            <span style={{ fontSize: '18px' }}>⚠️</span>
+            <div>
+              <strong style={{ fontSize: '14px', color: 'var(--pastel-yellow-text)' }}>
+                Estás en un servidor local
+              </strong>
+              <p style={{ fontSize: '13px', color: 'var(--pastel-yellow-text)', marginTop: '2px' }}>
+                Los enlaces se generan con <span className="mono">{publicBaseUrl}</span>, así que sí funcionan en los móviles.
+                Ten en cuenta que apuntan al sitio publicado: ejecuta <span className="mono">npm run build</span> y despliega
+                para que los concursantes reciban la última versión.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Phase Switcher */}
       <div className="card">
@@ -313,6 +355,21 @@ export function AdminPanel({
                   <div style={{ fontWeight: 700, fontSize: '15px' }}>{p.name}</div>
                   <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
                     Turno: <strong>#{p.tastingOrder}</strong> • PIN: <span className="mono" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{p.pin}</span>
+                  </div>
+
+                  <div
+                    className="mono"
+                    style={{
+                      marginTop: '6px',
+                      fontSize: '10px',
+                      color: 'var(--text-muted)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title={`Enlace de acceso de ${p.name}`}
+                  >
+                    {buildParticipantLink(state.id, p.pin)}
                   </div>
 
                   <div style={{ marginTop: '8px', display: 'flex', gap: '6px' }}>

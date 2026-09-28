@@ -72,3 +72,13 @@ export interface MultiContestData {
   activeContestId: string;
   contests: Record<string, ContestState>;
 }
+
+/** Lightweight contest info stored in `app_meta/registry`, used to list contests before they are loaded. */
+export interface RemoteContestSummary {
+  id: string;
+  title: string;
+  code?: string;
+  phase?: ContestPhase;
+  participantsCount?: number;
+  updatedAt?: string;
+}

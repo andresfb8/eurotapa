@@ -34,7 +34,12 @@ export function App() {
     currentParticipant,
     loginWithCode,
     loginAsTV,
-    logout
+    logout,
+
+    // Access link bootstrap
+    booting,
+    bootstrapError,
+    remoteContests
   } = useContest();
 
   // Tab for superadmin: 'admin' or 'tv' preview
@@ -143,11 +148,39 @@ export function App() {
     }
   };
 
+  // 0. Opening an access link -> wait until the contest and the session are resolved
+  if (booting) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'var(--color-canvas)',
+          padding: '24px'
+        }}
+      >
+        <div className="card" style={{ padding: '32px 40px', textAlign: 'center' }}>
+          <div
+            className="mono"
+            style={{ fontSize: '12px', letterSpacing: '0.08em', color: 'var(--text-muted)', textTransform: 'uppercase' }}
+          >
+            Abriendo tu espacio
+          </div>
+          <div style={{ fontSize: '1.4rem', marginTop: '6px' }}>Cargando concurso…</div>
+        </div>
+      </div>
+    );
+  }
+
   // 1. If not logged in -> Portal de Acceso por Código
   if (!session) {
     return (
       <LoginView
         contests={contestsList}
+        remoteContests={remoteContests}
+        initialError={bootstrapError}
         activeContestId={activeContestId}
         onSelectContest={switchContest}
         onLoginWithCode={loginWithCode}
