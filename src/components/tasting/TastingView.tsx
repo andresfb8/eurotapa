@@ -1,22 +1,25 @@
-import { Participant } from '../../types/contest';
+import { Member, Team } from '../../types/contest';
+import { teamLabel } from '../../utils/teams';
 import styles from './TastingView.module.css';
 
 interface TastingViewProps {
-  participants: Participant[];
+  teams: Team[];
+  members: Member[];
   activeId?: string;
   onSelectActive: (id: string) => void;
   onProceedToVoting: () => void;
 }
 
 export function TastingView({
-  participants,
+  teams,
+  members,
   activeId,
   onSelectActive,
   onProceedToVoting
 }: TastingViewProps) {
-  const sorted = [...participants].sort((a, b) => a.tastingOrder - b.tastingOrder);
-  const currentIndex = sorted.findIndex((p) => p.id === (activeId || sorted[0]?.id));
-  const currentParticipant = sorted[currentIndex >= 0 ? currentIndex : 0];
+  const sorted = [...teams].sort((a, b) => a.tastingOrder - b.tastingOrder);
+  const currentIndex = sorted.findIndex((t) => t.id === (activeId || sorted[0]?.id));
+  const currentTeam = sorted[currentIndex >= 0 ? currentIndex : 0];
 
   const handlePrev = () => {
     if (currentIndex > 0) {
@@ -30,7 +33,7 @@ export function TastingView({
     }
   };
 
-  if (!currentParticipant) {
+  if (!currentTeam) {
     return <div>No hay tapas registradas para degustación.</div>;
   }
 
@@ -54,10 +57,10 @@ export function TastingView({
 
       <div className={styles.tastingCard}>
         <div className={styles.imageContainer}>
-          {currentParticipant.photoUrl ? (
+          {currentTeam.photoUrl ? (
             <img
-              src={currentParticipant.photoUrl}
-              alt={currentParticipant.dishName}
+              src={currentTeam.photoUrl}
+              alt={currentTeam.dishName}
               className={styles.tapaHeroImage}
             />
           ) : (
@@ -66,26 +69,26 @@ export function TastingView({
             </div>
           )}
           <div className={styles.turnFloatingBadge}>
-            TURNO #{currentParticipant.tastingOrder}
+            TURNO #{currentTeam.tastingOrder}
           </div>
         </div>
 
         <div className={styles.detailsContent}>
           <div>
             <div className={styles.authorHeadline}>
-              Chef Participante: <strong>{currentParticipant.name}</strong>
+              Equipo: <strong>{teamLabel(currentTeam, members)}</strong>
             </div>
-            <h1 className={styles.dishHeading}>{currentParticipant.dishName}</h1>
+            <h1 className={styles.dishHeading}>{currentTeam.dishName}</h1>
 
             <p className={styles.descriptionParagraph}>
-              {currentParticipant.description || 'Sin descripción detallada por el chef.'}
+              {currentTeam.description || 'Sin descripción detallada por el equipo.'}
             </p>
 
-            {currentParticipant.ingredients.length > 0 && (
+            {currentTeam.ingredients.length > 0 && (
               <div className={styles.ingredientsSection}>
                 <div className={styles.ingredientsTitle}>Ingredientes Clave</div>
                 <div className={styles.ingredientChips}>
-                  {currentParticipant.ingredients.map((ing, i) => (
+                  {currentTeam.ingredients.map((ing, i) => (
                     <span key={i} className={styles.ingredientChip}>
                       {ing}
                     </span>
@@ -108,7 +111,7 @@ export function TastingView({
             </button>
 
             <span className="mono" style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-              #{currentParticipant.tastingOrder} / {sorted.length}
+              #{currentTeam.tastingOrder} / {sorted.length}
             </span>
 
             <button

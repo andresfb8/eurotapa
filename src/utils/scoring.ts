@@ -1,21 +1,23 @@
-import { Participant, VoteRecord, ScoreboardItem, GalaState } from '../types/contest';
+import { Member, Team, VoteRecord, ScoreboardItem, GalaState } from '../types/contest';
+import { teamLabel } from './teams';
 
 /**
  * Calculates Eurovision standings with tie-breaking rules.
- * Tie-breaker: If totalPoints are equal, compare descending scores awarded (who got more 14s, 13s, etc.)
+ * Tie-breaker: If totalPoints are equal, compare descending scores awarded (who got more 9s, 8s, etc.)
  */
 export function calculateScoreboard(
-  participants: Participant[],
+  teams: Team[],
+  members: Member[],
   votes: Record<string, VoteRecord>,
-  galaFilter?: { currentVoterIndex: number; activeVotersList: Participant[]; galaState: GalaState }
+  galaFilter?: { currentVoterIndex: number; activeVotersList: Member[]; galaState: GalaState }
 ): ScoreboardItem[] {
-  // Map of scores received per participant
+  // Map of scores received per team
   const receivedScoresMap: Record<string, number[]> = {};
   const totalPointsMap: Record<string, number> = {};
 
-  participants.forEach((p) => {
-    receivedScoresMap[p.id] = [];
-    totalPointsMap[p.id] = 0;
+  teams.forEach((t) => {
+    receivedScoresMap[t.id] = [];
+    totalPointsMap[t.id] = 0;
   });
 
   // Determine which votes are counted
@@ -66,14 +68,14 @@ export function calculateScoreboard(
   }
 
   // Build ScoreboardItem array
-  const items: ScoreboardItem[] = participants.map((p) => {
-    const scores = (receivedScoresMap[p.id] || []).sort((a, b) => b - a);
+  const items: ScoreboardItem[] = teams.map((team) => {
+    const scores = (receivedScoresMap[team.id] || []).sort((a, b) => b - a);
     return {
-      participantId: p.id,
-      name: p.name,
-      dishName: p.dishName,
-      photoUrl: p.photoUrl,
-      totalPoints: totalPointsMap[p.id] || 0,
+      teamId: team.id,
+      name: teamLabel(team, members),
+      dishName: team.dishName,
+      photoUrl: team.photoUrl,
+      totalPoints: totalPointsMap[team.id] || 0,
       rank: 0,
       highestPointsBreakdown: scores
     };

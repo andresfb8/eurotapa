@@ -12,7 +12,7 @@ interface ScoreboardListProps {
 interface RankMotion {
   /** Bumped on every reorder so movement indicators restart their entrance. */
   id: number;
-  /** participantId -> positions gained (positive = climbed, negative = dropped) */
+  /** teamId -> positions gained (positive = climbed, negative = dropped) */
   deltas: Record<string, number>;
 }
 
@@ -56,19 +56,19 @@ export function ScoreboardList({ items, lastAwardedTapaId, lastAwardedPoints }: 
     const deltas: Record<string, number> = {};
 
     items.forEach((item) => {
-      const el = rowRefs.current.get(item.participantId);
+      const el = rowRefs.current.get(item.teamId);
       if (!el) return;
 
       // offsetTop is layout based: it ignores in-flight transforms and page scroll.
       const top = el.offsetTop;
-      nextTops.set(item.participantId, top);
+      nextTops.set(item.teamId, top);
 
-      const previousRank = previousRanks.get(item.participantId);
+      const previousRank = previousRanks.get(item.teamId);
       if (previousRank !== undefined && previousRank !== item.rank) {
-        deltas[item.participantId] = previousRank - item.rank;
+        deltas[item.teamId] = previousRank - item.rank;
       }
 
-      const previousTop = previousTops.get(item.participantId);
+      const previousTop = previousTops.get(item.teamId);
       if (prefersReducedMotion || previousTop === undefined) return;
 
       const inFlight = readTranslateY(el);
@@ -76,10 +76,10 @@ export function ScoreboardList({ items, lastAwardedTapaId, lastAwardedPoints }: 
       if (Math.abs(travel) < MIN_TRAVEL_PX) return;
 
       // Replace whatever travel may still be running for this row (its offset was captured above).
-      travelAnimations.current.get(item.participantId)?.cancel();
+      travelAnimations.current.get(item.teamId)?.cancel();
 
       // Keep the scale of the row that just received points, so the pulse survives the travel.
-      const scale = lastAwardedTapaId === item.participantId ? ' scale(1.02)' : '';
+      const scale = lastAwardedTapaId === item.teamId ? ' scale(1.02)' : '';
       const animation = el.animate(
         [
           { transform: `translateY(${travel}px)${scale}` },
@@ -87,21 +87,21 @@ export function ScoreboardList({ items, lastAwardedTapaId, lastAwardedPoints }: 
         ],
         { duration: TRAVEL_DURATION, easing: TRAVEL_EASING }
       );
-      travelAnimations.current.set(item.participantId, animation);
+      travelAnimations.current.set(item.teamId, animation);
 
       const travelingClass = styles.rowTraveling;
       if (travelingClass) el.classList.add(travelingClass);
       animation.finished
         .catch(() => {})
         .then(() => {
-          if (travelAnimations.current.get(item.participantId) !== animation) return;
-          travelAnimations.current.delete(item.participantId);
+          if (travelAnimations.current.get(item.teamId) !== animation) return;
+          travelAnimations.current.delete(item.teamId);
           if (travelingClass) el.classList.remove(travelingClass);
         });
     });
 
     layoutTopsRef.current = nextTops;
-    ranksRef.current = new Map(items.map((item) => [item.participantId, item.rank]));
+    ranksRef.current = new Map(items.map((item) => [item.teamId, item.rank]));
 
     if (Object.keys(deltas).length > 0) {
       setMotion((previous) => ({ id: previous.id + 1, deltas }));
@@ -111,17 +111,17 @@ export function ScoreboardList({ items, lastAwardedTapaId, lastAwardedPoints }: 
   return (
     <>
       {items.map((item) => {
-        const isPulsing = lastAwardedTapaId === item.participantId;
+        const isPulsing = lastAwardedTapaId === item.teamId;
 
         return (
           <div
-            key={item.participantId}
+            key={item.teamId}
             className={styles.scoreRowSlot}
             ref={(el) => {
               if (el) {
-                rowRefs.current.set(item.participantId, el);
+                rowRefs.current.set(item.teamId, el);
               } else {
-                rowRefs.current.delete(item.participantId);
+                rowRefs.current.delete(item.teamId);
               }
             }}
           >
@@ -129,7 +129,7 @@ export function ScoreboardList({ items, lastAwardedTapaId, lastAwardedPoints }: 
               item={item}
               isPulsing={isPulsing}
               lastAwardedPoints={isPulsing ? lastAwardedPoints : undefined}
-              rankDelta={motion.deltas[item.participantId]}
+              rankDelta={motion.deltas[item.teamId]}
               motionId={motion.id}
             />
           </div>

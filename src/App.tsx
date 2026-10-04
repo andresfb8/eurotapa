@@ -12,11 +12,17 @@ export function App() {
   const {
     state,
     setPhase,
-    updateParticipant,
+    updateTeam,
+    updateMemberPin,
+    regenerateMemberPin,
     reorderTasting,
     submitVote,
+    removeVote,
     setActiveTasting,
     nextGalaStep,
+    undoGalaStep,
+    setGalaMode,
+    generateTastingSchedule,
     simulateSampleVotes,
     resetContest,
 
@@ -26,12 +32,12 @@ export function App() {
     createContest,
     switchContest,
     deleteContest,
-    addParticipantToContest,
-    removeParticipantFromContest,
+    addTeamToContest,
+    removeTeamFromContest,
 
     // Auth & Session
     session,
-    currentParticipant,
+    currentMember,
     loginWithCode,
     loginAsTV,
     logout,
@@ -53,7 +59,8 @@ export function App() {
         return (
           <DrawView
             title={state.title}
-            participants={state.participants}
+            teams={state.teams}
+            members={state.members}
             onReorder={reorderTasting}
             onProceedToTasting={() => setPhase('DEGUSTACION')}
           />
@@ -62,7 +69,8 @@ export function App() {
       case 'DEGUSTACION':
         return (
           <TastingView
-            participants={state.participants}
+            teams={state.teams}
+            members={state.members}
             activeId={state.activeTastingId}
             onSelectActive={setActiveTasting}
             onProceedToVoting={() => setPhase('VOTACION')}
@@ -70,7 +78,7 @@ export function App() {
         );
 
       case 'VOTACION': {
-        const total = state.participants.length;
+        const total = state.members.length;
         const voted = Object.keys(state.votes).length;
 
         return (
@@ -91,7 +99,7 @@ export function App() {
             </span>
             <h1 style={{ fontSize: '3rem' }}>El Jurado está Votando</h1>
             <p style={{ color: 'var(--text-muted)', fontSize: '16px', maxWidth: '540px' }}>
-              Cada participante está puntuando las tapas rivales desde su teléfono móvil (de {total - 1} puntos a 1).
+              Cada participante está puntuando las tapas rivales desde su teléfono móvil (de {Math.max(state.teams.length - 1, 0)} puntos a 1).
             </p>
 
             <div
@@ -137,11 +145,14 @@ export function App() {
       case 'PODIO':
         return (
           <GalaTVView
-            participants={state.participants}
+            teams={state.teams}
+            members={state.members}
             votes={state.votes}
             gala={state.gala}
             phase={state.phase}
+            galaMode={state.galaMode}
             onNextGalaStep={nextGalaStep}
+            onUndoGalaStep={undoGalaStep}
             onRestart={() => setPhase('SORTEO')}
           />
         );
@@ -194,12 +205,13 @@ export function App() {
     return (
       <main style={{ minHeight: '100vh', backgroundColor: 'var(--color-canvas)', padding: '20px 0' }}>
         <VotingView
-          participants={state.participants}
-          currentParticipant={currentParticipant}
+          teams={state.teams}
+          members={state.members}
+          currentMember={currentMember}
           votes={state.votes}
           phase={state.phase}
           onSubmitVote={submitVote}
-          onUpdateParticipant={updateParticipant}
+          onUpdateTeam={updateTeam}
           onLogout={logout}
         />
       </main>
@@ -221,7 +233,7 @@ export function App() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '14px', fontWeight: 700 }}>📺 {state.title}</span>
+            <span style={{ fontSize: '14px', fontWeight: 700 }}>{state.title}</span>
             <span className="badge badge-neutral" style={{ fontSize: '11px' }}>
               Fase: {state.phase}
             </span>
@@ -279,10 +291,14 @@ export function App() {
             onSelectContest={switchContest}
             onCreateContest={createContest}
             onDeleteContest={deleteContest}
-            onAddParticipant={addParticipantToContest}
-            onRemoveParticipant={removeParticipantFromContest}
+            onAddTeam={addTeamToContest}
+            onRemoveTeam={removeTeamFromContest}
+            onUpdateMemberPin={updateMemberPin}
+            onRegenerateMemberPin={regenerateMemberPin}
+            onRemoveVote={removeVote}
             onSetPhase={setPhase}
-            onUpdateParticipant={updateParticipant}
+            onSetGalaMode={setGalaMode}
+            onGenerateSchedule={generateTastingSchedule}
             onSimulateVotes={simulateSampleVotes}
             onReset={resetContest}
             onOpenTV={() => setAdminTab('tv')}

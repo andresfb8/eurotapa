@@ -1,46 +1,106 @@
 import { useMemo, useState } from 'react';
-import { Participant, VoteRecord, GalaState, ContestPhase } from '../../types/contest';
+import { GalaMode, GalaState, Member, Team, VoteRecord, ContestPhase } from '../../types/contest';
 import { calculateScoreboard } from '../../utils/scoring';
+import { teamLabel } from '../../utils/teams';
 import { ScoreboardList } from './ScoreboardList';
 import { PodiumView } from './PodiumView';
 import styles from './GalaTVView.module.css';
 
 interface GalaTVViewProps {
-  participants: Participant[];
+  teams: Team[];
+  members: Member[];
   votes: Record<string, VoteRecord>;
   gala: GalaState;
   phase: ContestPhase;
+  galaMode?: GalaMode;
   onNextGalaStep: () => void;
+  onUndoGalaStep: () => void;
   onRestart: () => void;
 }
 
 export function GalaTVView({
-  participants,
+  teams,
+  members,
   votes,
   gala,
   phase,
+  galaMode,
   onNextGalaStep,
+  onUndoGalaStep,
   onRestart
 }: GalaTVViewProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Voters list: participants who have registered votes
+  // Voters list: members who have registered votes
   const votersList = useMemo(
-    () => participants.filter((p) => !!votes[p.id]),
-    [participants, votes]
+    () => members.filter((m) => !!votes[m.id]),
+    [members, votes]
   );
 
   const currentVoter = votersList[gala.currentVoterIndex];
   const currentVoteRecord = currentVoter ? votes[currentVoter.id] : undefined;
+  const currentVoterTeam = currentVoter
+    ? teams.find((team) => team.id === currentVoter.teamId)
+    : undefined;
 
   // Real-time animated scoreboard based on current reveal progress
   const scoreboard = useMemo(() => {
-    return calculateScoreboard(participants, votes, {
+    return calculateScoreboard(teams, members, votes, {
       currentVoterIndex: gala.currentVoterIndex,
       activeVotersList: votersList,
       galaState: gala
     });
-  }, [participants, votes, gala, votersList]);
+  }, [teams, members, votes, gala, votersList]);
+
+  // Sorted list of votes from current voter in ASCENDING order (1 pt, 2 pts, ..., max pts).
+  // This hook must run on every render, before the podium early return, so the hook order stays stable.
+  const sortedAscendingScores = useMemo(() => {
+    if (!currentVoteRecord) return [];
+    return Object.entries(currentVoteRecord.scores)
+      .map(([targetId, pts]) => {
+        const target = teams.find((t) => t.id === targetId);
+        return {
+          targetId,
+          dishName: target?.dishName || 'Tapa',
+          teamName: target ? teamLabel(target, members) : 'Equipo',
+          points: pts,
+          isRevealed: gala.revealedTapaIds.includes(targetId)
+        };
+      })
+      .sort((a, b) => a.points - b.points);
+  }, [currentVoteRecord, teams, members, gala.revealedTapaIds]);
+
+  const maxPointValue = sortedAscendingScores.length > 0
+    ? sortedAscendingScores[sortedAscendingScores.length - 1].points
+    : 0;
+
+  // Pending (not yet revealed) scores, ascending. The gala mode decides how many are revealed one by one.
+  const pendingScores = sortedAscendingScores.filter((s) => !s.isRevealed);
+  const mode: GalaMode = galaMode ?? 'CLASICA';
+  const dramaticCount =
+    mode === 'CLASICA'
+      ? pendingScores.length
+      : mode === 'DIRECTA'
+      ? 0
+      : Math.min(mode === 'MAXIMA' ? 1 : 3, pendingScores.length);
+  const bulkCount = pendingScores.length - dramaticCount;
+  const nextBulkScores = bulkCount > 0 ? pendingScores.slice(0, bulkCount) : null;
+  const nextPointToReveal = !nextBulkScores && pendingScores.length > 0 ? pendingScores[0] : undefined;
+
+  // List of points revealed so far, sorted descending for display
+  const revealedScores = sortedAscendingScores
+    .filter((s) => s.isRevealed)
+    .sort((a, b) => b.points - a.points);
+
+  // Summary of the last bulk reveal ("reparto rápido")
+  const batchSummary = useMemo(() => {
+    const batchIds = gala.lastBatchIds ?? [];
+    if (batchIds.length === 0 || !currentVoteRecord) return null;
+    const sum = batchIds.reduce((acc, id) => acc + (currentVoteRecord.scores[id] ?? 0), 0);
+    return { count: batchIds.length, sum };
+  }, [gala.lastBatchIds, currentVoteRecord]);
+
+  const canUndo = (gala.history?.length ?? 0) > 0 || gala.currentVoterIndex > 0;
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -54,52 +114,41 @@ export function GalaTVView({
 
   // If in PODIO phase, show grand podium
   if (phase === 'PODIO' || gala.currentVoterIndex >= votersList.length) {
-    const finalScoreboard = calculateScoreboard(participants, votes);
+    const finalScoreboard = calculateScoreboard(teams, members, votes);
     return <PodiumView finalRanking={finalScoreboard} onRestart={onRestart} />;
   }
 
-  // Sorted list of votes from current voter in ASCENDING order (1 pt, 2 pts, ..., max pts)
-  const sortedAscendingScores = useMemo(() => {
-    if (!currentVoteRecord) return [];
-    return Object.entries(currentVoteRecord.scores)
-      .map(([targetId, pts]) => {
-        const target = participants.find((p) => p.id === targetId);
-        return {
-          targetId,
-          dishName: target?.dishName || 'Tapa',
-          chefName: target?.name || 'Chef',
-          points: pts,
-          isRevealed: gala.revealedTapaIds.includes(targetId)
-        };
-      })
-      .sort((a, b) => a.points - b.points);
-  }, [currentVoteRecord, participants, gala.revealedTapaIds]);
-
-  const maxPointValue = sortedAscendingScores.length > 0
-    ? sortedAscendingScores[sortedAscendingScores.length - 1].points
+  const bulkSum = nextBulkScores
+    ? nextBulkScores.reduce((acc, score) => acc + score.points, 0)
     : 0;
-
-  // Find the exact next point that will be revealed on click
-  const nextPointToReveal = sortedAscendingScores.find((s) => !s.isRevealed);
-
-  // List of points revealed so far, sorted descending for display
-  const revealedScores = sortedAscendingScores
-    .filter((s) => s.isRevealed)
-    .sort((a, b) => b.points - a.points);
 
   return (
     <div className={styles.galaContainer}>
       {/* Top Banner */}
       <div className={styles.galaHeader}>
         <div className="flex items-center gap-3">
-          <span className="badge badge-yellow">Modo TV — Gala Eurovisión (Monitor 27")</span>
+          <span className="badge badge-yellow">Modo TV — Gala Eurovisión</span>
           <span className="mono" style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>
             Jurado {gala.currentVoterIndex + 1} de {votersList.length}
           </span>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Fullscreen toggle for the 27" monitor */}
+          {/* Undo last reveal */}
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={onUndoGalaStep}
+            disabled={!canUndo}
+            title="Deshacer el último paso de la gala"
+          >
+            <svg className="icon" viewBox="0 0 24 24">
+              <polyline points="9 14 4 9 9 4" />
+              <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+            </svg>
+            Deshacer
+          </button>
+
+          {/* Fullscreen toggle */}
           <button
             className="btn btn-secondary btn-sm"
             onClick={toggleFullscreen}
@@ -111,13 +160,18 @@ export function GalaTVView({
             {isFullscreen ? 'Salir de Pantalla Completa' : 'Pantalla Completa'}
           </button>
 
-          {/* Action button: Reveals strictly 1 by 1 */}
+          {/* Action button */}
           <button
             className="btn btn-primary"
             onClick={onNextGalaStep}
             style={{ padding: '10px 22px', fontSize: '15px' }}
           >
-            {nextPointToReveal ? (
+            {nextBulkScores ? (
+              <>
+                <span style={{ fontSize: '16px' }}>⚡</span>
+                Reparto rápido (+{bulkSum} {bulkSum === 1 ? 'punto' : 'puntos'})
+              </>
+            ) : nextPointToReveal ? (
               nextPointToReveal.points === maxPointValue ? (
                 <>
                   <span style={{ fontSize: '16px' }}>👑</span>
@@ -142,7 +196,7 @@ export function GalaTVView({
       </div>
 
       <div className={styles.galaGrid}>
-        {/* Left Column: Live Scoreboard without bars, highly legible for 27" monitor */}
+        {/* Left Column: Live Scoreboard */}
         <div className={styles.scoreboardCol}>
           <div className={styles.scoreboardHeader}>
             <span>Posición y Tapa</span>
@@ -171,7 +225,14 @@ export function GalaTVView({
                 <div>
                   <h2 className={styles.voterNameHeading}>{currentVoter.name}</h2>
                   <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    Tapa propia: <em>{currentVoter.dishName}</em>
+                    {currentVoterTeam ? (
+                      <>
+                        Su tapa: <em>{currentVoterTeam.dishName || 'Sin título'}</em>
+                        {members.filter((m) => m.teamId === currentVoterTeam.id).length > 1 && (
+                          <> · Equipo: {teamLabel(currentVoterTeam, members)}</>
+                        )}
+                      </>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -190,9 +251,18 @@ export function GalaTVView({
                   justifyContent: 'space-between'
                 }}
               >
-                <span>Puntos Revelados Uno a Uno</span>
+                <span>Puntos Revelados</span>
                 <span>{revealedScores.length} de {sortedAscendingScores.length}</span>
               </div>
+
+              {batchSummary && (
+                <div
+                  className="badge badge-blue"
+                  style={{ marginBottom: '10px', padding: '6px 10px', fontSize: '12px', textTransform: 'none' }}
+                >
+                  ⚡ Reparto rápido: {batchSummary.count} tapas · +{batchSummary.sum} puntos
+                </div>
+              )}
 
               {revealedScores.length === 0 ? (
                 <div
@@ -205,7 +275,7 @@ export function GalaTVView({
                     borderRadius: '6px'
                   }}
                 >
-                  Pulsa el botón superior para desvelar el primer voto (+1 punto) de {currentVoter?.name}...
+                  Pulsa el botón superior para desvelar {mode === 'DIRECTA' ? 'el voto completo' : 'el primer voto (+1 punto)'} de {currentVoter?.name}...
                 </div>
               ) : (
                 <div className={styles.revealedPointsList}>
@@ -225,7 +295,7 @@ export function GalaTVView({
                             {score.dishName}
                           </div>
                           <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                            Chef: {score.chefName}
+                            Equipo: {score.teamName}
                           </div>
                         </div>
 

@@ -1,18 +1,20 @@
 import { useState, ChangeEvent } from 'react';
-import { Participant } from '../../types/contest';
+import { Member, Team } from '../../types/contest';
+import { membersOfTeam, teamLabel } from '../../utils/teams';
 import { compressImage } from '../../utils/imageCompressor';
 
 interface TapaEditModalProps {
-  participant: Participant;
-  onSave: (updated: Participant) => void;
+  team: Team;
+  members: Member[];
+  onSave: (updated: Team) => void;
   onClose: () => void;
 }
 
-export function TapaEditModal({ participant, onSave, onClose }: TapaEditModalProps) {
-  const [dishName, setDishName] = useState(participant.dishName);
-  const [description, setDescription] = useState(participant.description);
-  const [ingredientsText, setIngredientsText] = useState(participant.ingredients.join(', '));
-  const [photoUrl, setPhotoUrl] = useState(participant.photoUrl || '');
+export function TapaEditModal({ team, members, onSave, onClose }: TapaEditModalProps) {
+  const [dishName, setDishName] = useState(team.dishName);
+  const [description, setDescription] = useState(team.description);
+  const [ingredientsText, setIngredientsText] = useState(team.ingredients.join(', '));
+  const [photoUrl, setPhotoUrl] = useState(team.photoUrl || '');
   const [isCompressing, setIsCompressing] = useState(false);
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -39,7 +41,7 @@ export function TapaEditModal({ participant, onSave, onClose }: TapaEditModalPro
       .filter((i) => i.length > 0);
 
     onSave({
-      ...participant,
+      ...team,
       dishName: dishName.trim(),
       description: description.trim(),
       ingredients: updatedIngredients,
@@ -76,8 +78,8 @@ export function TapaEditModal({ participant, onSave, onClose }: TapaEditModalPro
       >
         <div className="flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
           <div>
-            <span className="badge badge-neutral">Chef: {participant.name}</span>
-            <h2 style={{ marginTop: '4px', fontSize: '1.4rem' }}>Ficha de tu Tapa</h2>
+            <span className="badge badge-neutral">Equipo: {teamLabel(team, members)}</span>
+            <h2 style={{ marginTop: '4px', fontSize: '1.4rem' }}>Ficha de vuestra Tapa</h2>
           </div>
           <button
             type="button"
@@ -87,6 +89,10 @@ export function TapaEditModal({ participant, onSave, onClose }: TapaEditModalPro
             ✕
           </button>
         </div>
+
+        <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+          Cualquiera de los {membersOfTeam(team.id, members).length === 1 ? 'participantes' : 'miembros del equipo'} ({teamLabel(team, members)}) puede completar o corregir esta ficha.
+        </p>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div>
@@ -156,7 +162,7 @@ export function TapaEditModal({ participant, onSave, onClose }: TapaEditModalPro
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Explica cómo la has preparado, técnicas especiales o sugerencia de maridaje..."
+              placeholder="Explica cómo la habéis preparado, técnicas especiales o sugerencia de maridaje..."
               style={{ resize: 'vertical' }}
             />
           </div>

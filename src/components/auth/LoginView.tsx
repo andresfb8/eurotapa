@@ -33,7 +33,7 @@ export function LoginView({
     const loadedIds = new Set(contests.map((c) => c.id));
     const loaded = contests.map((c) => ({
       id: c.id,
-      label: `${c.title} (${c.participants.length} participantes)`,
+      label: `${c.title} (${c.members.length} participantes)`,
       pending: false
     }));
     const pending = (remoteContests || [])

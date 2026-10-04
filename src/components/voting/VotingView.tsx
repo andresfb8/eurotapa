@@ -1,60 +1,68 @@
 import { useState, useMemo } from 'react';
-import { Participant, VoteRecord, ContestPhase } from '../../types/contest';
+import { Member, Team, VoteRecord, ContestPhase } from '../../types/contest';
+import { membersOfTeam, teamLabel } from '../../utils/teams';
 import { TapaEditModal } from './TapaEditModal';
 import { RulesModal } from '../RulesModal';
 import styles from './VotingView.module.css';
 
 interface VotingViewProps {
-  participants: Participant[];
-  currentParticipant?: Participant | null;
+  teams: Team[];
+  members: Member[];
+  currentMember?: Member | null;
   votes: Record<string, VoteRecord>;
   phase: ContestPhase;
   onSubmitVote: (vote: VoteRecord) => void;
-  onUpdateParticipant: (participant: Participant) => void;
+  onUpdateTeam: (team: Team) => void;
   onLogout?: () => void;
 }
 
 export function VotingView({
-  participants,
-  currentParticipant: initialParticipant,
+  teams,
+  members,
+  currentMember: initialMember,
   votes,
   phase,
   onSubmitVote,
-  onUpdateParticipant,
+  onUpdateTeam,
   onLogout
 }: VotingViewProps) {
-  const [selectedParticipantId, setSelectedParticipantId] = useState<string>(initialParticipant?.id || '');
-  const [enteredPin, setEnteredPin] = useState<string>(initialParticipant?.pin || '');
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!initialParticipant);
+  const [selectedMemberId, setSelectedMemberId] = useState<string>(initialMember?.id || '');
+  const [enteredPin, setEnteredPin] = useState<string>(initialMember?.pin || '');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!initialMember);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // Voting state: targetParticipantId -> points
+  // Voting state: teamId -> points
   const [assignedScores, setAssignedScores] = useState<Record<string, number>>({});
   const [expandedTapaId, setExpandedTapaId] = useState<string | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
 
-  // Find active participant
-  const currentParticipant = useMemo(() => {
-    if (initialParticipant) {
-      return participants.find((p) => p.id === initialParticipant.id) || initialParticipant;
+  // Find active member (a person) and their team
+  const currentMember = useMemo(() => {
+    if (initialMember) {
+      return members.find((m) => m.id === initialMember.id) || initialMember;
     }
-    if (selectedParticipantId) {
-      return participants.find((p) => p.id === selectedParticipantId);
+    if (selectedMemberId) {
+      return members.find((m) => m.id === selectedMemberId);
     }
     if (enteredPin.trim().length === 4) {
-      return participants.find((p) => p.pin === enteredPin.trim());
+      return members.find((m) => m.pin === enteredPin.trim());
     }
     return undefined;
-  }, [participants, initialParticipant, selectedParticipantId, enteredPin]);
+  }, [members, initialMember, selectedMemberId, enteredPin]);
 
-  // Rivals to vote for: all participants EXCEPT the current logged-in participant
+  const currentTeam = useMemo(() => {
+    if (!currentMember) return undefined;
+    return teams.find((t) => t.id === currentMember.teamId);
+  }, [teams, currentMember]);
+
+  // Rivals to vote for: every team EXCEPT the one this member cooks with
   const rivals = useMemo(() => {
-    if (!currentParticipant) return [];
-    return participants.filter((p) => p.id !== currentParticipant.id);
-  }, [participants, currentParticipant]);
+    if (!currentTeam) return [];
+    return teams.filter((t) => t.id !== currentTeam.id);
+  }, [teams, currentTeam]);
 
-  // Total points to distribute: from (N-1) down to 1
+  // Total points to distribute: from (number of rival tapas) down to 1
   const totalRivalsCount = rivals.length;
   const availablePointsList = useMemo(() => {
     const list: number[] = [];
@@ -73,8 +81,8 @@ export function VotingView({
     return availablePointsList.every((pts) => usedPoints.has(pts));
   }, [assignedScores, totalRivalsCount, availablePointsList, usedPoints]);
 
-  // Has current participant already submitted?
-  const existingVote = currentParticipant ? votes[currentParticipant.id] : undefined;
+  // Has current member already submitted?
+  const existingVote = currentMember ? votes[currentMember.id] : undefined;
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,9 +93,9 @@ export function VotingView({
       return;
     }
 
-    let matched = currentParticipant;
+    let matched = currentMember;
     if (!matched) {
-      matched = participants.find((p) => p.pin === pin);
+      matched = members.find((m) => m.pin === pin);
     }
 
     if (!matched || matched.pin !== pin) {
@@ -95,7 +103,7 @@ export function VotingView({
       return;
     }
 
-    setSelectedParticipantId(matched.id);
+    setSelectedMemberId(matched.id);
     setAuthError(null);
     setIsAuthenticated(true);
   };
@@ -107,7 +115,7 @@ export function VotingView({
     }
     setIsAuthenticated(false);
     setEnteredPin('');
-    setSelectedParticipantId('');
+    setSelectedMemberId('');
     setAssignedScores({});
   };
 
@@ -130,12 +138,12 @@ export function VotingView({
   };
 
   const handleSubmitVote = () => {
-    if (!currentParticipant || !isVoteComplete) return;
+    if (!currentMember || !isVoteComplete) return;
 
     if (window.confirm('¿Confirmas el envío definitivo de tus votos? No podrás modificarlos una vez sellados.')) {
       const record: VoteRecord = {
-        voterId: currentParticipant.id,
-        voterName: currentParticipant.name,
+        voterId: currentMember.id,
+        voterName: currentMember.name,
         scores: assignedScores,
         submittedAt: new Date().toISOString()
       };
@@ -144,7 +152,7 @@ export function VotingView({
   };
 
   // If not authenticated: show fallback login
-  if (!isAuthenticated || !currentParticipant) {
+  if (!isAuthenticated || !currentMember || !currentTeam) {
     return (
       <div className={styles.votingContainer}>
         <div className={styles.loginCard}>
@@ -163,16 +171,16 @@ export function VotingView({
               </label>
               <select
                 className="input"
-                value={selectedParticipantId}
+                value={selectedMemberId}
                 onChange={(e) => {
-                  setSelectedParticipantId(e.target.value);
+                  setSelectedMemberId(e.target.value);
                   setAuthError(null);
                 }}
               >
                 <option value="">-- Elige tu nombre o escribe directamente tu PIN abajo --</option>
-                {participants.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
                   </option>
                 ))}
               </select>
@@ -219,22 +227,24 @@ export function VotingView({
     );
   }
 
-  const hasDishName = !!currentParticipant.dishName && currentParticipant.dishName.trim().length > 0;
-  const hasPhoto = !!currentParticipant.photoUrl && currentParticipant.photoUrl.trim().length > 0;
-  const hasIngredients = currentParticipant.ingredients && currentParticipant.ingredients.length > 0;
+  const teamMembers = membersOfTeam(currentTeam.id, members);
+  const hasDishName = !!currentTeam.dishName && currentTeam.dishName.trim().length > 0;
+  const hasPhoto = !!currentTeam.photoUrl && currentTeam.photoUrl.trim().length > 0;
+  const hasIngredients = currentTeam.ingredients && currentTeam.ingredients.length > 0;
   const isProfileComplete = hasDishName && hasPhoto && hasIngredients;
 
   const isVotingOpen = phase === 'VOTACION' || phase === 'GALA_TV' || phase === 'PODIO';
 
   return (
     <div className={styles.votingContainer}>
-      {/* Participant Header (Exclusive for this user) */}
+      {/* Member Header (Exclusive for this person) */}
       <div className={styles.editTapaCard}>
         <div>
           <span className="badge badge-green">Chef Conectado</span>
-          <h2 style={{ fontSize: '1.6rem', marginTop: '4px' }}>{currentParticipant.name}</h2>
+          <h2 style={{ fontSize: '1.6rem', marginTop: '4px' }}>{currentMember.name}</h2>
           <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            Turno de cocina: <strong>#{currentParticipant.tastingOrder}</strong> • PIN personal: <span className="mono">{currentParticipant.pin}</span>
+            Equipo: <strong>{teamLabel(currentTeam, members)}</strong> · Turno #{currentTeam.tastingOrder} · PIN personal:{' '}
+            <span className="mono">{currentMember.pin}</span>
           </div>
         </div>
 
@@ -258,12 +268,12 @@ export function VotingView({
         </div>
       </div>
 
-      {/* Secret Tapa Management Card (Accessible at all times) */}
+      {/* Secret Tapa Management Card (Editable by any member of the team) */}
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
         <div className="flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
           <div className="flex items-center gap-2">
             <span style={{ fontSize: '16px' }}>🔒</span>
-            <h3 style={{ fontSize: '1.25rem' }}>Mi Tapa Secreta</h3>
+            <h3 style={{ fontSize: '1.25rem' }}>Nuestra Tapa Secreta</h3>
           </div>
           <button
             className="btn btn-primary btn-sm"
@@ -277,10 +287,10 @@ export function VotingView({
         </div>
 
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-          {currentParticipant.photoUrl ? (
+          {currentTeam.photoUrl ? (
             <img
-              src={currentParticipant.photoUrl}
-              alt={currentParticipant.dishName}
+              src={currentTeam.photoUrl}
+              alt={currentTeam.dishName}
               style={{ width: '80px', height: '80px', borderRadius: '8px', objectFit: 'cover', border: '1px solid var(--border-color)' }}
             />
           ) : (
@@ -306,14 +316,14 @@ export function VotingView({
 
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.4rem', color: 'var(--text-primary)' }}>
-              {currentParticipant.dishName || 'Sin título definido'}
+              {currentTeam.dishName || 'Sin título definido'}
             </div>
             <div style={{ fontSize: '13px', color: 'var(--text-body)', marginTop: '4px' }}>
-              {currentParticipant.description || 'Pulsa en "Editar Ficha y Foto" para añadir la elaboración.'}
+              {currentTeam.description || 'Pulsa en "Editar Ficha y Foto" para añadir la elaboración.'}
             </div>
-            {currentParticipant.ingredients.length > 0 && (
+            {currentTeam.ingredients.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
-                {currentParticipant.ingredients.map((ing, i) => (
+                {currentTeam.ingredients.map((ing, i) => (
                   <span key={i} className="badge badge-neutral" style={{ fontSize: '11px', textTransform: 'none' }}>
                     {ing}
                   </span>
@@ -321,6 +331,17 @@ export function VotingView({
               </div>
             )}
           </div>
+        </div>
+
+        {/* Team members */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Cocinan esta tapa:</span>
+          {teamMembers.map((m) => (
+            <span key={m.id} className={`badge ${m.id === currentMember.id ? 'badge-blue' : 'badge-neutral'}`} style={{ fontSize: '11px', textTransform: 'none' }}>
+              {m.name}
+              {m.id === currentMember.id ? ' (tú)' : ''}
+            </span>
+          ))}
         </div>
 
         {/* Readiness Checklist */}
@@ -338,7 +359,7 @@ export function VotingView({
         </div>
 
         <p style={{ fontSize: '12px', color: 'var(--text-muted)', backgroundColor: 'var(--color-canvas)', padding: '8px 12px', borderRadius: '4px', margin: 0 }}>
-          🔒 <strong>Confidencialidad absoluta:</strong> El organizador y los demás participantes solo ven que has completado la ficha ({isProfileComplete ? 'Completada' : 'Pendiente'}), pero nadie verá tu plato ni ingredientes hasta que llegue tu turno de cata en la TV.
+          🔒 <strong>Confidencialidad absoluta:</strong> El organizador y los demás participantes solo ven que la ficha del equipo está completada ({isProfileComplete ? 'Completada' : 'Pendiente'}), pero nadie verá el plato ni los ingredientes hasta que llegue el turno de cata en la TV.
         </p>
       </div>
 
@@ -351,7 +372,7 @@ export function VotingView({
           </span>
           <h3 style={{ fontSize: '1.5rem' }}>Las votaciones se abrirán tras la cata</h3>
           <p style={{ color: 'var(--text-muted)', maxWidth: '440px', fontSize: '14px' }}>
-            Cocina y sirve tu plato cuando llegue tu <strong>Turno #{currentParticipant.tastingOrder}</strong>. En cuanto todos los comensales hayan probado todas las tapas, el organizador activará aquí el reparto de puntos estilo Eurovisión.
+            Cocina y sirve tu plato cuando llegue vuestro <strong>Turno #{currentTeam.tastingOrder}</strong>. En cuanto todos los comensales hayan probado todas las tapas, el organizador activará aquí el reparto de puntos estilo Eurovisión.
           </p>
         </div>
       ) : existingVote ? (
@@ -362,7 +383,7 @@ export function VotingView({
           </div>
           <h2 style={{ fontSize: '1.8rem' }}>¡Tus puntos han sido guardados!</h2>
           <p style={{ color: 'var(--text-muted)', maxWidth: '420px', fontSize: '14px' }}>
-            Gracias por participar, {currentParticipant.name}. Los resultados se revelarán en directo en la pantalla de TV al comenzar la Gran Gala de EuroTapa.
+            Gracias por participar, {currentMember.name}. Los resultados se revelarán en directo en la pantalla de TV al comenzar la Gran Gala de EuroTapa.
           </p>
         </div>
       ) : (
@@ -411,8 +432,8 @@ export function VotingView({
                     )}
 
                     <div className={styles.tapaInfo}>
-                      <div className={styles.dishTitle}>{rival.dishName || `Tapa de ${rival.name}`}</div>
-                      <div className={styles.authorText}>Chef: {rival.name}</div>
+                      <div className={styles.dishTitle}>{rival.dishName || `Tapa de ${teamLabel(rival, members)}`}</div>
+                      <div className={styles.authorText}>Equipo: {teamLabel(rival, members)}</div>
                     </div>
 
                     <button
@@ -478,7 +499,7 @@ export function VotingView({
           >
             {isVoteComplete
               ? 'Sellar y Enviar mis Puntos'
-              : `Asigna todos los puntos (${Object.keys(assignedScores).length}/{totalRivalsCount})`}
+              : `Asigna todos los puntos (${Object.keys(assignedScores).length}/${totalRivalsCount})`}
           </button>
         </>
       )}
@@ -486,8 +507,9 @@ export function VotingView({
       {/* Edit modal */}
       {isEditModalOpen && (
         <TapaEditModal
-          participant={currentParticipant}
-          onSave={onUpdateParticipant}
+          team={currentTeam}
+          members={members}
+          onSave={onUpdateTeam}
           onClose={() => setIsEditModalOpen(false)}
         />
       )}

@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { doc, onSnapshot, setDoc, deleteDoc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, deleteDoc, getDoc, deleteField } from 'firebase/firestore';
 import { db } from './firebase';
 import {
   ContestState,
-  Participant,
+  Member,
+  Team,
   VoteRecord,
   ContestPhase,
+  GalaMode,
   UserSession,
   UserRole,
   MultiContestData,
@@ -13,6 +15,7 @@ import {
 } from '../types/contest';
 import { INITIAL_CONTEST_STATE } from './mockData';
 import { MASTER_PIN, generateUniquePin } from '../utils/pins';
+import { normalizeContest } from '../utils/contestMigration';
 
 const MULTI_STORAGE_KEY = 'eurotapa_multicontest_v2';
 const LEGACY_STORAGE_KEY = 'eurotapa_state_v1';
@@ -38,23 +41,28 @@ function loadInitialMultiData(): MultiContestData {
   try {
     const raw = localStorage.getItem(MULTI_STORAGE_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw) as MultiContestData;
-      if (parsed && parsed.contests && Object.keys(parsed.contests).length > 0) {
-        return parsed;
+      const parsed = JSON.parse(raw) as { activeContestId?: string; contests?: Record<string, unknown> };
+      const contests: Record<string, ContestState> = {};
+      if (parsed && parsed.contests) {
+        Object.values(parsed.contests).forEach((candidate) => {
+          const normalized = normalizeContest(candidate);
+          if (normalized) contests[normalized.id] = normalized;
+        });
+      }
+      const ids = Object.keys(contests);
+      if (ids.length > 0) {
+        const activeContestId =
+          parsed.activeContestId && contests[parsed.activeContestId] ? parsed.activeContestId : ids[0];
+        return { activeContestId, contests };
       }
     }
 
-    // Check for legacy migration
+    // Check for legacy migration (single contest)
     const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
     if (legacyRaw) {
-      const parsedLegacy = JSON.parse(legacyRaw) as ContestState;
-      if (parsedLegacy && parsedLegacy.id) {
-        return {
-          activeContestId: parsedLegacy.id,
-          contests: {
-            [parsedLegacy.id]: parsedLegacy
-          }
-        };
+      const normalized = normalizeContest(JSON.parse(legacyRaw));
+      if (normalized) {
+        return { activeContestId: normalized.id, contests: { [normalized.id]: normalized } };
       }
     }
   } catch (e) {
@@ -143,9 +151,7 @@ async function fetchContestFromCloud(contestId: string): Promise<ContestState | 
   try {
     const snapshot = await getDoc(doc(db, 'concursos', contestId));
     if (!snapshot.exists()) return null;
-    const data = snapshot.data() as ContestState;
-    if (!data || !data.id || !Array.isArray(data.participants)) return null;
-    return data;
+    return normalizeContest(snapshot.data());
   } catch (e) {
     console.warn('No se pudo cargar el concurso desde Firestore:', e);
     return null;
@@ -216,7 +222,7 @@ async function resolveAccessFromUrl(
   }
 
   if (contest) {
-    const matched = contest.participants.find((p) => p.pin === params.pin);
+    const matched = contest.members.find((m) => m.pin === params.pin);
     if (matched) {
       return {
         multi,
@@ -234,15 +240,15 @@ async function resolveAccessFromUrl(
   }
 
   const matches = Object.values(multi.contests).flatMap((c) => {
-    const participant = c.participants.find((p) => p.pin === params.pin);
-    return participant ? [{ contest: c, participant }] : [];
+    const member = c.members.find((m) => m.pin === params.pin);
+    return member ? [{ contest: c, member }] : [];
   });
 
   if (matches.length === 1) {
     const match = matches[0];
     return {
       multi,
-      session: { role: 'participant', contestId: match.contest.id, participantId: match.participant.id },
+      session: { role: 'participant', contestId: match.contest.id, participantId: match.member.id },
       error: null,
       injectedContest
     };
@@ -301,7 +307,9 @@ function syncMultiToCloud(data: MultiContestData): void {
     const active = data.contests[data.activeContestId];
     if (active) {
       const docRef = doc(db, 'concursos', active.id);
-      setDoc(docRef, active, { merge: true }).catch((err) => {
+      // `participants` is the legacy field kept by old documents: remove it so only teams/members remain.
+      const payload = { ...active, participants: deleteField() } as unknown as ContestState;
+      setDoc(docRef, payload, { merge: true }).catch((err) => {
         console.warn('Firestore active contest sync warning:', err);
       });
     }
@@ -314,7 +322,7 @@ function syncMultiToCloud(data: MultiContestData): void {
         title: c.title,
         code: c.code || '',
         phase: c.phase,
-        participantsCount: c.participants.length,
+        participantsCount: c.members.length,
         updatedAt: c.updatedAt
       }));
       setDoc(registryRef, { contests: contestSummaries, activeContestId: data.activeContestId }, { merge: true }).catch(() => {});
@@ -423,8 +431,8 @@ export function useContest() {
         docRef,
         (snapshot) => {
           if (snapshot.exists()) {
-            const cloudContest = snapshot.data() as ContestState;
-            if (cloudContest && cloudContest.id && cloudContest.participants) {
+            const cloudContest = normalizeContest(snapshot.data());
+            if (cloudContest) {
               setMultiData((prev) => {
                 const next = {
                   ...prev,
@@ -519,14 +527,38 @@ export function useContest() {
     [updateCurrentContest]
   );
 
-  const updateParticipant = useCallback(
-    (updatedParticipant: Participant) => {
+  /** Updates the ficha (dish data) of a team. Editable by any of its members. */
+  const updateTeam = useCallback(
+    (updatedTeam: Team) => {
       updateCurrentContest((prev) => ({
         ...prev,
-        participants: prev.participants.map((p) =>
-          p.id === updatedParticipant.id ? updatedParticipant : p
-        )
+        teams: prev.teams.map((team) => (team.id === updatedTeam.id ? updatedTeam : team))
       }));
+    },
+    [updateCurrentContest]
+  );
+
+  const updateMemberPin = useCallback(
+    (memberId: string, pin: string) => {
+      updateCurrentContest((prev) => ({
+        ...prev,
+        members: prev.members.map((member) => (member.id === memberId ? { ...member, pin } : member))
+      }));
+    },
+    [updateCurrentContest]
+  );
+
+  const regenerateMemberPin = useCallback(
+    (memberId: string) => {
+      updateCurrentContest((prev) => {
+        const member = prev.members.find((m) => m.id === memberId);
+        if (!member) return prev;
+        const pin = generateUniquePin(prev.members);
+        return {
+          ...prev,
+          members: prev.members.map((m) => (m.id === memberId ? { ...m, pin } : m))
+        };
+      });
     },
     [updateCurrentContest]
   );
@@ -534,14 +566,14 @@ export function useContest() {
   const reorderTasting = useCallback(
     (orderedIds: string[]) => {
       updateCurrentContest((prev) => {
-        const updatedParticipants = prev.participants.map((p) => {
-          const orderIndex = orderedIds.indexOf(p.id);
+        const updatedTeams = prev.teams.map((team) => {
+          const orderIndex = orderedIds.indexOf(team.id);
           return {
-            ...p,
-            tastingOrder: orderIndex !== -1 ? orderIndex + 1 : p.tastingOrder
+            ...team,
+            tastingOrder: orderIndex !== -1 ? orderIndex + 1 : team.tastingOrder
           };
         });
-        return { ...prev, participants: updatedParticipants };
+        return { ...prev, teams: updatedTeams };
       });
     },
     [updateCurrentContest]
@@ -560,16 +592,41 @@ export function useContest() {
     [updateCurrentContest]
   );
 
-  const setActiveTasting = useCallback(
-    (participantId: string) => {
-      updateCurrentContest((prev) => ({ ...prev, activeTastingId: participantId }));
+  /** Reopens a sealed vote so that member can vote again (e.g. they made a mistake). */
+  const removeVote = useCallback(
+    (memberId: string) => {
+      updateCurrentContest((prev) => {
+        if (!prev.votes[memberId]) return prev;
+        const votes = { ...prev.votes };
+        delete votes[memberId];
+        return { ...prev, votes };
+      });
     },
     [updateCurrentContest]
   );
 
+  const setActiveTasting = useCallback(
+    (teamId: string) => {
+      updateCurrentContest((prev) => ({ ...prev, activeTastingId: teamId }));
+    },
+    [updateCurrentContest]
+  );
+
+  const setGalaMode = useCallback(
+    (mode: GalaMode) => {
+      updateCurrentContest((prev) => ({ ...prev, galaMode: mode }));
+    },
+    [updateCurrentContest]
+  );
+
+  /**
+   * Reveals the next gala step for the current voter according to the contest's gala mode:
+   * CLASICA reveals every point one by one; DRAMATICA / MAXIMA first deliver all low points in a
+   * single bulk click and then the top 3 / the maximum; DIRECTA delivers the whole vote at once.
+   */
   const nextGalaStep = useCallback(() => {
     updateCurrentContest((prev) => {
-      const votersList = prev.participants.filter((p) => !!prev.votes[p.id]);
+      const votersList = prev.members.filter((m) => !!prev.votes[m.id]);
       if (votersList.length === 0) return prev;
 
       const currentIdx = prev.gala.currentVoterIndex;
@@ -582,24 +639,11 @@ export function useContest() {
       if (!voteRecord) return prev;
 
       const sortedEntriesAscending = Object.entries(voteRecord.scores).sort((a, b) => a[1] - b[1]);
-
-      const nextToReveal = sortedEntriesAscending.find(
+      const pending = sortedEntriesAscending.filter(
         ([tapaId]) => !prev.gala.revealedTapaIds.includes(tapaId)
       );
 
-      if (nextToReveal) {
-        const [tapaId, points] = nextToReveal;
-        return {
-          ...prev,
-          gala: {
-            ...prev.gala,
-            step: 'REVELANDO_PUNTOS',
-            revealedTapaIds: [...prev.gala.revealedTapaIds, tapaId],
-            lastAwardedTapaId: tapaId,
-            lastAwardedPoints: points
-          }
-        };
-      } else {
+      if (pending.length === 0) {
         const nextIdx = currentIdx + 1;
         if (nextIdx >= votersList.length) {
           return {
@@ -609,38 +653,184 @@ export function useContest() {
               ...prev.gala,
               currentVoterIndex: nextIdx,
               step: 'COMPLETO',
-              lastAwardedTapaId: undefined,
-              lastAwardedPoints: undefined
-            }
-          };
-        } else {
-          return {
-            ...prev,
-            gala: {
-              currentVoterIndex: nextIdx,
-              step: 'ESPERANDO',
               revealedTapaIds: [],
               lastAwardedTapaId: undefined,
-              lastAwardedPoints: undefined
+              lastAwardedPoints: undefined,
+              lastBatchIds: [],
+              history: []
             }
           };
         }
+        return {
+          ...prev,
+          gala: {
+            currentVoterIndex: nextIdx,
+            step: 'ESPERANDO',
+            revealedTapaIds: [],
+            lastAwardedTapaId: undefined,
+            lastAwardedPoints: undefined,
+            lastBatchIds: [],
+            history: []
+          }
+        };
       }
+
+      const mode = prev.galaMode ?? 'CLASICA';
+      const dramaticCount =
+        mode === 'CLASICA'
+          ? pending.length
+          : mode === 'DIRECTA'
+          ? 0
+          : Math.min(mode === 'MAXIMA' ? 1 : 3, pending.length);
+      const bulkCount = pending.length - dramaticCount;
+      const history = prev.gala.history ?? [];
+
+      if (bulkCount > 0) {
+        const batch = pending.slice(0, bulkCount);
+        const batchIds = batch.map(([tapaId]) => tapaId);
+        const lastEntry = batch[batch.length - 1];
+        return {
+          ...prev,
+          gala: {
+            ...prev.gala,
+            step: 'REVELANDO_PUNTOS',
+            revealedTapaIds: [...prev.gala.revealedTapaIds, ...batchIds],
+            history: [...history, batchIds],
+            lastAwardedTapaId: lastEntry[0],
+            lastAwardedPoints: lastEntry[1],
+            lastBatchIds: batchIds
+          }
+        };
+      }
+
+      const [tapaId, points] = pending[0];
+      return {
+        ...prev,
+        gala: {
+          ...prev.gala,
+          step: 'REVELANDO_PUNTOS',
+          revealedTapaIds: [...prev.gala.revealedTapaIds, tapaId],
+          history: [...history, [tapaId]],
+          lastAwardedTapaId: tapaId,
+          lastAwardedPoints: points,
+          lastBatchIds: []
+        }
+      };
     });
   }, [updateCurrentContest]);
+
+  /**
+   * Undoes the last reveal click. If the current voter has nothing revealed yet, it goes back to
+   * the previous voter with their points fully revealed (so the admin can replay them if needed).
+   */
+  const undoGalaStep = useCallback(() => {
+    updateCurrentContest((prev) => {
+      const votersList = prev.members.filter((m) => !!prev.votes[m.id]);
+      const history = prev.gala.history ?? [];
+
+      if (history.length > 0) {
+        const lastBatch = history[history.length - 1];
+        const newHistory = history.slice(0, -1);
+        const newRevealed = prev.gala.revealedTapaIds.filter((id) => !lastBatch.includes(id));
+        const previousBatch = newHistory[newHistory.length - 1];
+
+        let lastAwardedTapaId: string | undefined;
+        let lastAwardedPoints: number | undefined;
+        if (previousBatch) {
+          lastAwardedTapaId = previousBatch[previousBatch.length - 1];
+          const currentVoter = votersList[prev.gala.currentVoterIndex];
+          lastAwardedPoints = currentVoter
+            ? prev.votes[currentVoter.id]?.scores[lastAwardedTapaId]
+            : undefined;
+        }
+
+        return {
+          ...prev,
+          phase: prev.phase === 'PODIO' ? 'GALA_TV' : prev.phase,
+          gala: {
+            ...prev.gala,
+            step: 'REVELANDO_PUNTOS',
+            revealedTapaIds: newRevealed,
+            history: newHistory,
+            lastAwardedTapaId,
+            lastAwardedPoints,
+            lastBatchIds: []
+          }
+        };
+      }
+
+      // Nothing revealed for the current voter: step back to the previous juror.
+      const index = prev.gala.currentVoterIndex;
+      if (index <= 0) return prev;
+
+      const targetIndex = Math.min(index - 1, votersList.length - 1);
+      const targetVoter = votersList[targetIndex];
+      if (!targetVoter) return prev;
+      const vote = prev.votes[targetVoter.id];
+      if (!vote) return prev;
+
+      const sorted = Object.entries(vote.scores).sort((a, b) => a[1] - b[1]);
+      const ids = sorted.map(([tapaId]) => tapaId);
+      const lastEntry = sorted[sorted.length - 1];
+
+      return {
+        ...prev,
+        phase: 'GALA_TV',
+        gala: {
+          ...prev.gala,
+          currentVoterIndex: targetIndex,
+          step: 'REVELANDO_PUNTOS',
+          revealedTapaIds: ids,
+          history: ids.map((tapaId) => [tapaId]),
+          lastAwardedTapaId: lastEntry?.[0],
+          lastAwardedPoints: lastEntry?.[1],
+          lastBatchIds: []
+        }
+      };
+    });
+  }, [updateCurrentContest]);
+
+  /** Fills `tastingTime` for every team from a start time and a minutes-per-turn interval. */
+  const generateTastingSchedule = useCallback(
+    (startTime: string, minutesPerTeam: number) => {
+      const match = /^(\d{1,2}):(\d{2})$/.exec(startTime.trim());
+      if (!match) return;
+      const startMinutes = parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+      const step = Math.max(1, Math.round(minutesPerTeam));
+
+      updateCurrentContest((prev) => {
+        const sorted = [...prev.teams].sort((a, b) => a.tastingOrder - b.tastingOrder);
+        const times = new Map<string, string>();
+        sorted.forEach((team, index) => {
+          const total = startMinutes + index * step;
+          const hh = String(Math.floor(total / 60) % 24).padStart(2, '0');
+          const mm = String(total % 60).padStart(2, '0');
+          times.set(team.id, `${hh}:${mm}`);
+        });
+        return {
+          ...prev,
+          teams: prev.teams.map((team) => ({
+            ...team,
+            tastingTime: times.get(team.id) ?? team.tastingTime
+          }))
+        };
+      });
+    },
+    [updateCurrentContest]
+  );
 
   const simulateSampleVotes = useCallback(() => {
     updateCurrentContest((prev) => {
       const generatedVotes: Record<string, VoteRecord> = {};
-      const N = prev.participants.length;
+      const rivalCount = Math.max(prev.teams.length - 1, 0);
 
-      prev.participants.forEach((voter) => {
-        const rivalTapas = prev.participants.filter((p) => p.id !== voter.id);
-        const shuffled = [...rivalTapas].sort(() => Math.random() - 0.5);
+      prev.members.forEach((voter) => {
+        const rivals = prev.teams.filter((team) => team.id !== voter.teamId);
+        const shuffled = [...rivals].sort(() => Math.random() - 0.5);
 
         const scores: Record<string, number> = {};
-        shuffled.forEach((rival, idx) => {
-          scores[rival.id] = N - 1 - idx;
+        shuffled.forEach((team, idx) => {
+          scores[team.id] = rivalCount - idx;
         });
 
         generatedVotes[voter.id] = {
@@ -658,7 +848,9 @@ export function useContest() {
         gala: {
           currentVoterIndex: 0,
           step: 'ESPERANDO',
-          revealedTapaIds: []
+          revealedTapaIds: [],
+          lastBatchIds: [],
+          history: []
         }
       };
     });
@@ -672,7 +864,9 @@ export function useContest() {
       gala: {
         currentVoterIndex: 0,
         step: 'ESPERANDO',
-        revealedTapaIds: []
+        revealedTapaIds: [],
+        lastBatchIds: [],
+        history: []
       }
     }));
   }, [updateCurrentContest]);
@@ -686,37 +880,44 @@ export function useContest() {
       title: string,
       code?: string,
       adminPin: string = MASTER_PIN,
-      initialParticipants: { name: string; pin: string }[] = []
+      teamsInput: { memberNames: string[] }[] = []
     ) => {
       const contestId = 'contest_' + Date.now().toString(36);
       const cleanCode = (code || title.substring(0, 4).toUpperCase() + Math.floor(10 + Math.random() * 90)).trim().toUpperCase();
+      const seed = Date.now().toString(36);
 
-      const participants: Participant[] = [];
-      initialParticipants.forEach((p, idx) => {
-        participants.push({
-          id: `p_${idx + 1}_${Date.now().toString(36)}`,
-          name: p.name,
-          pin: generateUniquePin(participants, p.pin),
+      const cleanInput = teamsInput
+        .map((entry) => ({
+          memberNames: entry.memberNames.map((name) => name.trim()).filter(Boolean).slice(0, 3)
+        }))
+        .filter((entry) => entry.memberNames.length > 0);
+
+      const effectiveInput =
+        cleanInput.length > 0
+          ? cleanInput
+          : [{ memberNames: ['Participante 1'] }, { memberNames: ['Participante 2'] }, { memberNames: ['Participante 3'] }];
+
+      const teams: Team[] = [];
+      const members: Member[] = [];
+
+      effectiveInput.forEach((entry, teamIdx) => {
+        const teamId = `t_${seed}_${teamIdx + 1}`;
+        teams.push({
+          id: teamId,
           dishName: '',
           ingredients: [],
           description: '',
-          tastingOrder: idx + 1
+          tastingOrder: teamIdx + 1
         });
-      });
-
-      if (participants.length === 0) {
-        ['Participante 1', 'Participante 2', 'Participante 3'].forEach((name, idx) => {
-          participants.push({
-            id: `p_${idx + 1}`,
+        entry.memberNames.forEach((name, memberIdx) => {
+          members.push({
+            id: `m_${seed}_${teamIdx + 1}_${memberIdx + 1}`,
             name,
-            pin: generateUniquePin(participants),
-            dishName: '',
-            ingredients: [],
-            description: '',
-            tastingOrder: idx + 1
+            pin: generateUniquePin(members),
+            teamId
           });
         });
-      }
+      });
 
       const newContest: ContestState = {
         id: contestId,
@@ -724,12 +925,17 @@ export function useContest() {
         code: cleanCode,
         phase: 'CONFIGURACION',
         adminPin: adminPin.trim() || MASTER_PIN,
-        participants,
+        teams,
+        members,
         votes: {},
+        activeTastingId: teams[0]?.id,
+        galaMode: 'CLASICA',
         gala: {
           currentVoterIndex: 0,
           step: 'ESPERANDO',
-          revealedTapaIds: []
+          revealedTapaIds: [],
+          lastBatchIds: [],
+          history: []
         },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -802,27 +1008,41 @@ export function useContest() {
     []
   );
 
-  const addParticipantToContest = useCallback(
-    (contestId: string, name: string, pin?: string) => {
+  /** Adds a new tapa/team with 1-3 members to a contest. */
+  const addTeamToContest = useCallback(
+    (contestId: string, memberNames: string[]) => {
       setMultiData((prev) => {
         const contest = prev.contests[contestId];
         if (!contest) return prev;
 
-        const nextOrder = contest.participants.length + 1;
-        const autoPin = generateUniquePin(contest.participants, pin);
-        const newP: Participant = {
-          id: `p_${Date.now().toString(36)}`,
-          name: name.trim(),
-          pin: autoPin,
+        const names = memberNames.map((name) => name.trim()).filter(Boolean).slice(0, 3);
+        if (names.length === 0) return prev;
+
+        const seed = Date.now().toString(36);
+        const teamId = `t_${seed}_${Math.random().toString(36).slice(2, 5)}`;
+        const newMembers: Member[] = [];
+        names.forEach((name, idx) => {
+          const pin = generateUniquePin([...contest.members, ...newMembers]);
+          newMembers.push({
+            id: `m_${seed}_${idx + 1}`,
+            name,
+            pin,
+            teamId
+          });
+        });
+
+        const newTeam: Team = {
+          id: teamId,
           dishName: '',
           ingredients: [],
           description: '',
-          tastingOrder: nextOrder
+          tastingOrder: contest.teams.length + 1
         };
 
         const updatedContest: ContestState = {
           ...contest,
-          participants: [...contest.participants, newP],
+          teams: [...contest.teams, newTeam],
+          members: [...contest.members, ...newMembers],
           updatedAt: new Date().toISOString()
         };
 
@@ -840,23 +1060,38 @@ export function useContest() {
     []
   );
 
-  const removeParticipantFromContest = useCallback(
-    (contestId: string, participantId: string) => {
+  const removeTeamFromContest = useCallback(
+    (contestId: string, teamId: string) => {
       setMultiData((prev) => {
         const contest = prev.contests[contestId];
         if (!contest) return prev;
+        if (contest.teams.length <= 1) {
+          alert('No puedes eliminar el único equipo del concurso.');
+          return prev;
+        }
 
-        const filtered = contest.participants
-          .filter((p) => p.id !== participantId)
-          .map((p, idx) => ({ ...p, tastingOrder: idx + 1 }));
+        const removedMemberIds = contest.members
+          .filter((m) => m.teamId === teamId)
+          .map((m) => m.id);
 
-        const updatedVotes = { ...contest.votes };
-        delete updatedVotes[participantId];
+        const teams = contest.teams
+          .filter((team) => team.id !== teamId)
+          .map((team, idx) => ({ ...team, tastingOrder: idx + 1 }));
+
+        const members = contest.members.filter((m) => m.teamId !== teamId);
+
+        const votes = { ...contest.votes };
+        removedMemberIds.forEach((id) => {
+          delete votes[id];
+        });
 
         const updatedContest: ContestState = {
           ...contest,
-          participants: filtered,
-          votes: updatedVotes,
+          teams,
+          members,
+          votes,
+          activeTastingId:
+            contest.activeTastingId === teamId ? teams[0]?.id : contest.activeTastingId,
           updatedAt: new Date().toISOString()
         };
 
@@ -946,9 +1181,9 @@ export function useContest() {
         chosenContest = multiData.contests[multiData.activeContestId];
       }
 
-      // Check if code is a Participant PIN (participants take priority so an admin PIN can never leak access to them)
+      // Check if code is a member PIN (members take priority so an admin PIN can never leak access to them)
       if (chosenContest) {
-        const matched = chosenContest.participants.find((p) => p.pin === code);
+        const matched = chosenContest.members.find((m) => m.pin === code);
         if (matched) {
           const newSession: UserSession = {
             role: 'participant',
@@ -977,8 +1212,8 @@ export function useContest() {
 
       // No contest context: search the cached contests, detecting ambiguous PINs
       const matches = Object.values(multiData.contests).flatMap((c) => {
-        const participant = c.participants.find((p) => p.pin === code);
-        return participant ? [{ contest: c, participant }] : [];
+        const member = c.members.find((m) => m.pin === code);
+        return member ? [{ contest: c, member }] : [];
       });
 
       if (matches.length === 1) {
@@ -986,7 +1221,7 @@ export function useContest() {
         const newSession: UserSession = {
           role: 'participant',
           contestId: match.contest.id,
-          participantId: match.participant.id
+          participantId: match.member.id
         };
         saveSession(newSession);
         return { success: true, role: 'participant' };
@@ -1020,21 +1255,32 @@ export function useContest() {
     saveSession(null);
   }, [saveSession]);
 
-  // Current logged in participant (if role === 'participant')
-  const currentParticipant = useMemo(() => {
+  // Current logged in member (if role === 'participant') and the team they cook with
+  const currentMember = useMemo(() => {
     if (session?.role !== 'participant' || !session.participantId) return null;
-    return currentContest.participants.find((p) => p.id === session.participantId) || null;
+    return currentContest.members.find((m) => m.id === session.participantId) || null;
   }, [session, currentContest]);
+
+  const currentTeam = useMemo(() => {
+    if (!currentMember) return null;
+    return currentContest.teams.find((team) => team.id === currentMember.teamId) || null;
+  }, [currentMember, currentContest]);
 
   return {
     // Current contest state & actions
     state: currentContest,
     setPhase,
-    updateParticipant,
+    updateTeam,
+    updateMemberPin,
+    regenerateMemberPin,
     reorderTasting,
     submitVote,
+    removeVote,
     setActiveTasting,
     nextGalaStep,
+    undoGalaStep,
+    setGalaMode,
+    generateTastingSchedule,
     simulateSampleVotes,
     resetContest,
 
@@ -1045,13 +1291,14 @@ export function useContest() {
     createContest,
     switchContest,
     deleteContest,
-    addParticipantToContest,
-    removeParticipantFromContest,
+    addTeamToContest,
+    removeTeamFromContest,
     updateContestMeta,
 
     // Session & Auth
     session,
-    currentParticipant,
+    currentMember,
+    currentTeam,
     loginWithCode,
     loginAsTV,
     logout,

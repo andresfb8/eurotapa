@@ -58,7 +58,7 @@ export function ScoreboardBar({
       <div className={styles.tvDishInfo}>
         <div className={styles.tvDishTitle}>{item.dishName}</div>
         <div className={styles.tvChefName}>
-          Chef: <strong>{item.name}</strong>
+          Equipo: <strong>{item.name}</strong>
         </div>
       </div>
 

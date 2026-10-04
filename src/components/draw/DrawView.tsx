@@ -1,20 +1,22 @@
 import { useState } from 'react';
-import { Participant } from '../../types/contest';
+import { Member, Team } from '../../types/contest';
+import { membersOfTeam, teamLabel } from '../../utils/teams';
 import { formatTastingScheduleForWhatsApp } from '../../utils/whatsappExport';
 import styles from './DrawView.module.css';
 
 interface DrawViewProps {
   title: string;
-  participants: Participant[];
+  teams: Team[];
+  members: Member[];
   onReorder: (newOrderIds: string[]) => void;
   onProceedToTasting: () => void;
 }
 
-export function DrawView({ title, participants, onReorder, onProceedToTasting }: DrawViewProps) {
+export function DrawView({ title, teams, members, onReorder, onProceedToTasting }: DrawViewProps) {
   const [isShuffling, setIsShuffling] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const sortedParticipants = [...participants].sort((a, b) => a.tastingOrder - b.tastingOrder);
+  const sortedTeams = [...teams].sort((a, b) => a.tastingOrder - b.tastingOrder);
 
   // Trigger lottery animation
   const handleShuffleLottery = () => {
@@ -22,7 +24,7 @@ export function DrawView({ title, participants, onReorder, onProceedToTasting }:
     let iterations = 0;
     const interval = setInterval(() => {
       iterations++;
-      const shuffledIds = [...participants].map((p) => p.id).sort(() => Math.random() - 0.5);
+      const shuffledIds = [...teams].map((t) => t.id).sort(() => Math.random() - 0.5);
       onReorder(shuffledIds);
 
       if (iterations >= 10) {
@@ -36,19 +38,19 @@ export function DrawView({ title, participants, onReorder, onProceedToTasting }:
   // Move item up or down manually
   const moveItem = (index: number, direction: 'up' | 'down') => {
     const newIndex = direction === 'up' ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= sortedParticipants.length) return;
+    if (newIndex < 0 || newIndex >= sortedTeams.length) return;
 
-    const copy = [...sortedParticipants];
+    const copy = [...sortedTeams];
     const temp = copy[index];
     copy[index] = copy[newIndex];
     copy[newIndex] = temp;
 
-    onReorder(copy.map((p) => p.id));
+    onReorder(copy.map((t) => t.id));
   };
 
   // Copy WhatsApp formatted text
   const handleCopyWhatsApp = async () => {
-    const text = formatTastingScheduleForWhatsApp(title, sortedParticipants);
+    const text = formatTastingScheduleForWhatsApp(title, sortedTeams, members);
     try {
       await navigator.clipboard.writeText(text);
       showToast('Horario de cocina copiado para WhatsApp.');
@@ -68,12 +70,12 @@ export function DrawView({ title, participants, onReorder, onProceedToTasting }:
         <div className="flex items-center justify-between">
           <span className="badge badge-neutral">Fase Previa: Sorteo de Cocina</span>
           <span className="mono" style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            {participants.length} participantes
+            {teams.length} tapas · {members.length} participantes
           </span>
         </div>
         <h1 style={{ marginTop: '8px' }}>Sorteo del Orden de Salida</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '15px' }}>
-          Sortea los turnos de cocina para que cada comensal sepa cuándo le toca preparar su plato.
+          Sortea los turnos de cocina para que cada equipo sepa cuándo le toca preparar su plato.
           Las recetas e ingredientes son <strong>100% secretas</strong> y se revelarán únicamente al servir cada tapa.
         </p>
       </div>
@@ -112,44 +114,51 @@ export function DrawView({ title, participants, onReorder, onProceedToTasting }:
         </button>
       </div>
 
-      {/* Grid showing ONLY participants and turn numbers (NO dish names, NO photos) */}
+      {/* Grid showing ONLY team members and turn numbers (NO dish names, NO photos) */}
       <div className={styles.cardsGrid}>
-        {sortedParticipants.map((participant, index) => (
-          <div key={participant.id} className={styles.drawCard}>
-            <div className={styles.orderBadge}>
-              #{index + 1}
-            </div>
-
-            <div className={styles.cardContent}>
-              <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.4rem', color: 'var(--text-primary)' }}>
-                {participant.name}
+        {sortedTeams.map((team, index) => {
+          const teamMembers = membersOfTeam(team.id, members);
+          return (
+            <div key={team.id} className={styles.drawCard}>
+              <div className={styles.orderBadge}>
+                #{index + 1}
               </div>
-              <div className={styles.authorMeta}>
-                <span>Turno {index + 1} de cocina</span>
-                {participant.tastingTime && <span>• {participant.tastingTime} h</span>}
+
+              <div className={styles.cardContent}>
+                <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.4rem', color: 'var(--text-primary)' }}>
+                  {teamLabel(team, members)}
+                </div>
+                <div className={styles.authorMeta}>
+                  <span>
+                    {teamMembers.length === 1
+                      ? 'Turno de cocina'
+                      : `Equipo de ${teamMembers.length} · Turno de cocina`}
+                  </span>
+                  {team.tastingTime && <span>• {team.tastingTime} h</span>}
+                </div>
+              </div>
+
+              <div className={styles.cardControls}>
+                <button
+                  className={styles.controlBtn}
+                  onClick={() => moveItem(index, 'up')}
+                  disabled={index === 0}
+                  title="Adelantar turno"
+                >
+                  ▲
+                </button>
+                <button
+                  className={styles.controlBtn}
+                  onClick={() => moveItem(index, 'down')}
+                  disabled={index === sortedTeams.length - 1}
+                  title="Retrasar turno"
+                >
+                  ▼
+                </button>
               </div>
             </div>
-
-            <div className={styles.cardControls}>
-              <button
-                className={styles.controlBtn}
-                onClick={() => moveItem(index, 'up')}
-                disabled={index === 0}
-                title="Adelantar turno"
-              >
-                ▲
-              </button>
-              <button
-                className={styles.controlBtn}
-                onClick={() => moveItem(index, 'down')}
-                disabled={index === sortedParticipants.length - 1}
-                title="Retrasar turno"
-              >
-                ▼
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {toastMessage && (

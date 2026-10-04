@@ -78,7 +78,7 @@ export function PodiumView({ finalRanking, onRestart }: PodiumViewProps) {
             )}
             <div>
               <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.4rem' }}>{second.dishName}</div>
-              <div style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Chef: {second.name}</div>
+              <div style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Equipo: {second.name}</div>
             </div>
             <div className="mono" style={{ fontSize: '20px', fontWeight: 700, marginTop: '12px' }}>
               {second.totalPoints} pts
@@ -115,7 +115,7 @@ export function PodiumView({ finalRanking, onRestart }: PodiumViewProps) {
             <div>
               <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.9rem', lineHeight: 1.1 }}>{first.dishName}</div>
               <div style={{ fontSize: '16px', color: 'var(--text-body)', marginTop: '4px' }}>
-                Chef: <strong>{first.name}</strong>
+                Equipo: <strong>{first.name}</strong>
               </div>
             </div>
             <div className="mono" style={{ fontSize: '28px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '12px' }}>
@@ -149,7 +149,7 @@ export function PodiumView({ finalRanking, onRestart }: PodiumViewProps) {
             )}
             <div>
               <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.3rem' }}>{third.dishName}</div>
-              <div style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Chef: {third.name}</div>
+              <div style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Equipo: {third.name}</div>
             </div>
             <div className="mono" style={{ fontSize: '18px', fontWeight: 700, marginTop: '12px' }}>
               {third.totalPoints} pts
@@ -182,7 +182,7 @@ export function PodiumView({ finalRanking, onRestart }: PodiumViewProps) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {finalRanking.map((item) => (
             <div
-              key={item.participantId}
+              key={item.teamId}
               className="flex items-center justify-between"
               style={{
                 padding: '10px 14px',

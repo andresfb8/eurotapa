@@ -6,7 +6,7 @@ interface CreateContestModalProps {
     title: string,
     code?: string,
     adminPin?: string,
-    participants?: { name: string; pin: string }[]
+    teams?: { memberNames: string[] }[]
   ) => void;
 }
 
@@ -14,9 +14,7 @@ export function CreateContestModal({ onClose, onCreate }: CreateContestModalProp
   const [title, setTitle] = useState('');
   const [code, setCode] = useState('');
   const [adminPin, setAdminPin] = useState('9999');
-  const [participantsText, setParticipantsText] = useState(
-    'Carlos\nMarta\nJavier\nElena\nDavid\nLaura'
-  );
+  const [teamsText, setTeamsText] = useState('Carlos\nMarta, Luis\nJavier, Elena, David');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,16 +23,30 @@ export function CreateContestModal({ onClose, onCreate }: CreateContestModalProp
       return;
     }
 
-    // Parse participant names
-    const lines = participantsText
+    // Each line is one tapa/team; names separated by commas (max. 3 members per team)
+    const lines = teamsText
       .split('\n')
       .map((l) => l.trim())
       .filter((l) => l.length > 0);
 
-    // PINs are assigned by the store, guaranteeing they are unique inside the contest
-    const participants = lines.map((name) => ({ name, pin: '' }));
+    let hadTooMany = false;
+    const teams = lines
+      .map((line) => {
+        const names = line
+          .split(',')
+          .map((n) => n.trim())
+          .filter((n) => n.length > 0);
+        if (names.length > 3) hadTooMany = true;
+        return { memberNames: names.slice(0, 3) };
+      })
+      .filter((t) => t.memberNames.length > 0);
 
-    onCreate(title.trim(), code.trim() || undefined, adminPin.trim() || '9999', participants);
+    if (hadTooMany) {
+      alert('Alguna línea tenía más de 3 nombres: se usarán solo los 3 primeros de cada equipo.');
+    }
+
+    // PINs are assigned by the store, guaranteeing they are unique inside the contest
+    onCreate(title.trim(), code.trim() || undefined, adminPin.trim() || '9999', teams);
     onClose();
   };
 
@@ -134,17 +146,18 @@ export function CreateContestModal({ onClose, onCreate }: CreateContestModalProp
 
           <div>
             <label style={{ fontSize: '13px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>
-              Nombres de los Amigos / Participantes
+              Tapas y Equipos
             </label>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '8px' }}>
-              Escribe un nombre por línea. A cada participante se le asignará un PIN único de 4 dígitos dentro de este concurso (1001, 1002, 1003...). Podrás añadir más participantes después.
+              Una tapa por línea. Si la cocina un equipo, escribe sus nombres separados por comas
+              (máximo 3 personas por tapa). A cada persona se le asignará un PIN único de 4 dígitos.
             </span>
             <textarea
               className="input"
               rows={6}
-              value={participantsText}
-              onChange={(e) => setParticipantsText(e.target.value)}
-              placeholder="Carlos&#10;Marta&#10;Javier..."
+              value={teamsText}
+              onChange={(e) => setTeamsText(e.target.value)}
+              placeholder={'Carlos\nMarta, Luis\nJavier, Elena, David'}
             />
           </div>
 

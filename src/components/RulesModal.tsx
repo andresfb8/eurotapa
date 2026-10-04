@@ -59,7 +59,8 @@ export function RulesModal({ onClose }: RulesModalProps) {
               Regla de Oro: Prohibido el Auto-Voto
             </div>
             <p style={{ color: 'var(--text-body)' }}>
-              Al igual que en Eurovisión, ningún participante puede votar por su propia tapa. En tu pantalla móvil, tu creación aparecerá automáticamente deshabilitada.
+              Al igual que en Eurovisión, ningún participante puede votar por su propia tapa. Si la tapa la cocina un equipo,
+              ninguno de sus miembros podrá votarla: aparecerá automáticamente deshabilitada en vuestros móviles.
             </p>
           </div>
 
@@ -70,7 +71,9 @@ export function RulesModal({ onClose }: RulesModalProps) {
               Reparto Estricto de Puntos (de N-1 a 1)
             </div>
             <p style={{ color: 'var(--text-body)' }}>
-              Si compiten 10 cocineros, deberás repartir <strong>9 puntos</strong> a tu tapa preferida, <strong>8 puntos</strong> a la segunda, y así sucesivamente hasta <strong>1 punto</strong>. No se pueden repetir puntos ni dejar huecos sin calificar.
+              Si compiten 8 tapas, cada jurado repartirá <strong>7 puntos</strong> a su tapa preferida, <strong>6 puntos</strong> a la
+              segunda, y así sucesivamente hasta <strong>1 punto</strong>. No se pueden repetir puntos ni dejar huecos sin calificar.
+              Cada miembro de un equipo emite su propio voto.
             </p>
           </div>
 
@@ -92,7 +95,7 @@ export function RulesModal({ onClose }: RulesModalProps) {
               Transparencia e Ingredientes
             </div>
             <p style={{ color: 'var(--text-body)' }}>
-              Cada chef debe registrar el nombre, ingredientes clave y foto de su tapa. Esto permite a los amigos consultar posibles alérgenos y recordar los matices de cada plato antes de puntuar.
+              Cada equipo debe registrar el nombre, ingredientes clave y foto de su tapa. Esto permite a los amigos consultar posibles alérgenos y recordar los matices de cada plato antes de puntuar.
             </p>
           </div>
 

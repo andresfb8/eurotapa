@@ -1,7 +1,10 @@
-import { useState } from 'react';
-import { ContestState, Participant, ContestPhase } from '../../types/contest';
+import { useEffect, useState } from 'react';
+import { ContestState, GalaMode, Member } from '../../types/contest';
 import { CreateContestModal } from './CreateContestModal';
 import { buildParticipantLink, buildTvLink, getPublicAppBaseUrl, isLocalOrigin } from '../../utils/appUrl';
+import { membersOfTeam, teamLabel } from '../../utils/teams';
+import { formatVotingReminder } from '../../utils/whatsappExport';
+import { isValidPin } from '../../utils/pins';
 import styles from './AdminPanel.module.css';
 
 interface AdminPanelProps {
@@ -12,20 +15,24 @@ interface AdminPanelProps {
     title: string,
     code?: string,
     adminPin?: string,
-    participants?: { name: string; pin: string }[]
+    teams?: { memberNames: string[] }[]
   ) => void;
   onDeleteContest: (contestId: string) => void;
-  onAddParticipant: (contestId: string, name: string, pin?: string) => void;
-  onRemoveParticipant: (contestId: string, participantId: string) => void;
-  onSetPhase: (phase: ContestPhase) => void;
-  onUpdateParticipant: (participant: Participant) => void;
+  onAddTeam: (contestId: string, memberNames: string[]) => void;
+  onRemoveTeam: (contestId: string, teamId: string) => void;
+  onUpdateMemberPin: (memberId: string, pin: string) => void;
+  onRegenerateMemberPin: (memberId: string) => void;
+  onRemoveVote: (memberId: string) => void;
+  onSetPhase: (phase: ContestState['phase']) => void;
+  onSetGalaMode: (mode: GalaMode) => void;
+  onGenerateSchedule: (startTime: string, minutesPerTeam: number) => void;
   onSimulateVotes: () => void;
   onReset: () => void;
   onOpenTV?: () => void;
   onLogout?: () => void;
 }
 
-const PHASES: { key: ContestPhase; label: string }[] = [
+const PHASES: { key: ContestState['phase']; label: string }[] = [
   { key: 'CONFIGURACION', label: '1. Configuración' },
   { key: 'SORTEO', label: '2. Sorteo' },
   { key: 'DEGUSTACION', label: '3. Degustación' },
@@ -34,40 +41,204 @@ const PHASES: { key: ContestPhase; label: string }[] = [
   { key: 'PODIO', label: '6. Podio Final' }
 ];
 
+const GALA_MODES: { key: GalaMode; label: string; description: string }[] = [
+  {
+    key: 'CLASICA',
+    label: 'Clásica — uno a uno',
+    description: 'Cada punto de cada jurado se revela con un clic, del más bajo a la puntuación máxima.'
+  },
+  {
+    key: 'DRAMATICA',
+    label: 'Dramática — Reparto rápido + Top 3',
+    description: 'Los puntos bajos se entregan todos de golpe con un clic y después el Top 3 se revela uno a uno.'
+  },
+  {
+    key: 'MAXIMA',
+    label: 'Solo la máxima',
+    description: 'Reparto rápido de los puntos bajos en un clic y después se revela únicamente la puntuación máxima.'
+  },
+  {
+    key: 'DIRECTA',
+    label: 'Directa — todo de golpe',
+    description: 'El voto completo de cada jurado se entrega con un solo clic. Ideal si la gala va con prisa.'
+  }
+];
+
+interface MemberRowProps {
+  member: Member;
+  hasVoted: boolean;
+  takenPins: Set<string>;
+  copiedMemberId: string | null;
+  onCopyLink: (member: Member) => void;
+  onSavePin: (memberId: string, pin: string) => void;
+  onRegeneratePin: (memberId: string) => void;
+  onRemoveVote: (member: Member) => void;
+}
+
+function MemberRow({
+  member,
+  hasVoted,
+  takenPins,
+  copiedMemberId,
+  onCopyLink,
+  onSavePin,
+  onRegeneratePin,
+  onRemoveVote
+}: MemberRowProps) {
+  const [pinDraft, setPinDraft] = useState(member.pin);
+
+  useEffect(() => {
+    setPinDraft(member.pin);
+  }, [member.pin]);
+
+  const commitPin = () => {
+    const clean = pinDraft.trim();
+    if (clean === member.pin) return;
+    if (!isValidPin(clean)) {
+      alert('El PIN debe ser un código de 4 dígitos.');
+      setPinDraft(member.pin);
+      return;
+    }
+    if (takenPins.has(clean)) {
+      alert(`El PIN ${clean} ya está en uso por otra persona de este concurso.`);
+      setPinDraft(member.pin);
+      return;
+    }
+    onSavePin(member.id, clean);
+  };
+
+  const isCopied = copiedMemberId === member.id;
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '8px',
+        padding: '6px 0',
+        borderTop: '1px solid var(--border-subtle)',
+        flexWrap: 'wrap'
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+        <span style={{ fontWeight: 600, fontSize: '13px' }}>{member.name}</span>
+        <span className={`badge ${hasVoted ? 'badge-green' : 'badge-neutral'}`} style={{ fontSize: '10px' }}>
+          {hasVoted ? 'Ya Votó' : 'Sin Votar'}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <input
+          type="text"
+          className="input mono"
+          value={pinDraft}
+          maxLength={4}
+          inputMode="numeric"
+          onChange={(e) => setPinDraft(e.target.value.replace(/\D/g, ''))}
+          onBlur={commitPin}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
+          title="PIN personal (editable)"
+          style={{ width: '58px', padding: '3px 6px', fontSize: '12px', textAlign: 'center' }}
+        />
+
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          style={{ fontSize: '11px', padding: '3px 8px' }}
+          onClick={() => onCopyLink(member)}
+          title="Copiar enlace directo de acceso para enviar por WhatsApp"
+        >
+          {isCopied ? '✓ Copiado' : '📋 Enlace'}
+        </button>
+
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          style={{ fontSize: '11px', padding: '3px 8px' }}
+          onClick={() => onRegeneratePin(member.id)}
+          title="Generar un PIN nuevo para esta persona"
+        >
+          ↻ PIN
+        </button>
+
+        {hasVoted && (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            style={{ fontSize: '11px', padding: '3px 8px', color: 'var(--pastel-red-text)' }}
+            onClick={() => onRemoveVote(member)}
+            title="Reabrir el voto sellado de esta persona"
+          >
+            Reabrir voto
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function AdminPanel({
   state,
   contests,
   onSelectContest,
   onCreateContest,
   onDeleteContest,
-  onAddParticipant,
-  onRemoveParticipant,
+  onAddTeam,
+  onRemoveTeam,
+  onUpdateMemberPin,
+  onRegenerateMemberPin,
+  onRemoveVote,
   onSetPhase,
+  onSetGalaMode,
+  onGenerateSchedule,
   onSimulateVotes,
   onReset,
   onOpenTV,
   onLogout
 }: AdminPanelProps) {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [newParticipantName, setNewParticipantName] = useState('');
-  const [copiedParticipantId, setCopiedParticipantId] = useState<string | null>(null);
+  const [newTeamNames, setNewTeamNames] = useState('');
+  const [copiedMemberId, setCopiedMemberId] = useState<string | null>(null);
   const [isTvLinkCopied, setIsTvLinkCopied] = useState(false);
+  const [isAllLinksCopied, setIsAllLinksCopied] = useState(false);
+  const [isReminderCopied, setIsReminderCopied] = useState(false);
+  const [scheduleStart, setScheduleStart] = useState('14:00');
+  const [scheduleMinutes, setScheduleMinutes] = useState('15');
 
-  const totalParticipants = state.participants.length;
+  const totalTeams = state.teams.length;
+  const totalMembers = state.members.length;
   const votesReceivedCount = Object.keys(state.votes).length;
 
   const isLocal = isLocalOrigin();
   const publicBaseUrl = getPublicAppBaseUrl();
 
-  const profilesReadyCount = state.participants.filter(
-    (p) => !!p.dishName && !!p.photoUrl && p.ingredients.length > 0
+  const profilesReadyCount = state.teams.filter(
+    (t) => !!t.dishName && !!t.photoUrl && t.ingredients.length > 0
   ).length;
 
-  const handleAddParticipant = (e: React.FormEvent) => {
+  const sortedTeams = [...state.teams].sort((a, b) => a.tastingOrder - b.tastingOrder);
+  const pendingMembers = state.members.filter((m) => !state.votes[m.id]);
+  const galaMode: GalaMode = state.galaMode ?? 'CLASICA';
+
+  const handleAddTeam = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newParticipantName.trim()) return;
-    onAddParticipant(state.id, newParticipantName.trim());
-    setNewParticipantName('');
+    const names = newTeamNames
+      .split(',')
+      .map((n) => n.trim())
+      .filter(Boolean);
+
+    if (names.length === 0) return;
+    if (names.length > 3) {
+      alert('Un equipo puede tener como máximo 3 personas. Se usarán las 3 primeras.');
+    }
+    onAddTeam(state.id, names.slice(0, 3));
+    setNewTeamNames('');
   };
 
   const handleCopyTvLink = () => {
@@ -80,14 +251,62 @@ export function AdminPanel({
     });
   };
 
-  const handleCopyParticipantLink = (participant: Participant) => {
-    const link = buildParticipantLink(state.id, participant.pin);
+  const handleCopyParticipantLink = (member: Member) => {
+    const link = buildParticipantLink(state.id, member.pin);
     navigator.clipboard.writeText(link).then(() => {
-      setCopiedParticipantId(participant.id);
-      setTimeout(() => setCopiedParticipantId(null), 2500);
+      setCopiedMemberId(member.id);
+      setTimeout(() => setCopiedMemberId(null), 2500);
     }).catch(() => {
-      prompt('Copia este enlace para el participante:', link);
+      prompt(`Copia este enlace para ${member.name}:`, link);
     });
+  };
+
+  const handleCopyAllLinks = () => {
+    const lines = state.members.map((m) => `${m.name}: ${buildParticipantLink(state.id, m.pin)}`);
+    const text = `${state.title} — Enlaces de acceso\n\n${lines.join('\n')}`;
+    navigator.clipboard.writeText(text).then(() => {
+      setIsAllLinksCopied(true);
+      setTimeout(() => setIsAllLinksCopied(false), 2500);
+    }).catch(() => {
+      prompt('Copia los enlaces de acceso:', text);
+    });
+  };
+
+  const handleCopyReminder = () => {
+    const text = formatVotingReminder(
+      state.title,
+      pendingMembers.map((m) => m.name),
+      publicBaseUrl
+    );
+    navigator.clipboard.writeText(text).then(() => {
+      setIsReminderCopied(true);
+      setTimeout(() => setIsReminderCopied(false), 2500);
+    }).catch(() => {
+      prompt('Copia el recordatorio para el grupo:', text);
+    });
+  };
+
+  const handleRemoveVote = (member: Member) => {
+    if (
+      window.confirm(
+        `¿Reabrir el voto de ${member.name}? Podrá volver a votar. Si la gala ya había comenzado, usa "Deshacer" o reinicia la gala para evitar descuadres.`
+      )
+    ) {
+      onRemoveVote(member.id);
+    }
+  };
+
+  const handleGenerateSchedule = () => {
+    const minutes = parseInt(scheduleMinutes, 10);
+    if (isNaN(minutes) || minutes <= 0 || minutes > 240) {
+      alert('Indica los minutos entre turnos (1 a 240).');
+      return;
+    }
+    if (!/^\d{1,2}:\d{2}$/.test(scheduleStart.trim())) {
+      alert('Indica una hora de inicio válida, por ejemplo 14:00.');
+      return;
+    }
+    onGenerateSchedule(scheduleStart.trim(), minutes);
   };
 
   return (
@@ -121,7 +340,7 @@ export function AdminPanel({
                 onClick={onOpenTV}
                 title="Abrir pantalla de proyección para la TV"
               >
-                📺 Modo TV
+                Modo TV
               </button>
             )}
 
@@ -131,7 +350,7 @@ export function AdminPanel({
               onClick={handleCopyTvLink}
               title="Copiar enlace para abrir la pantalla de TV en otro dispositivo"
             >
-              {isTvLinkCopied ? '✓ Enlace TV Copiado' : '🔗 Enlace TV'}
+              {isTvLinkCopied ? '✓ Enlace TV Copiado' : 'Enlace TV'}
             </button>
 
             <button
@@ -179,7 +398,7 @@ export function AdminPanel({
             >
               {contests.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.title} ({c.participants.length} participantes - {c.phase})
+                  {c.title} ({c.teams.length} tapas - {c.members.length} personas - {c.phase})
                 </option>
               ))}
             </select>
@@ -254,14 +473,36 @@ export function AdminPanel({
         </p>
       </div>
 
+      {/* Gala configuration */}
+      <div className="card">
+        <div className="flex items-center justify-between" style={{ marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+          <h3>Configuración de la Gala</h3>
+          <span className="badge badge-yellow">Se puede cambiar en caliente</span>
+        </div>
+        <div className={styles.phaseTabs}>
+          {GALA_MODES.map((m) => (
+            <button
+              key={m.key}
+              className={`${styles.phaseTab} ${galaMode === m.key ? styles.phaseTabActive : ''}`}
+              onClick={() => onSetGalaMode(m.key)}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '10px' }}>
+          {GALA_MODES.find((m) => m.key === galaMode)?.description}
+        </p>
+      </div>
+
       {/* Metrics Grid */}
       <div className={styles.statsGrid}>
         <div className={styles.statCard}>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Fichas Secretas Listas
+            Fichas de Equipo Listas
           </span>
           <div className={styles.statNumber}>
-            {profilesReadyCount} <span style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>/ {totalParticipants}</span>
+            {profilesReadyCount} <span style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>/ {totalTeams}</span>
           </div>
         </div>
 
@@ -270,7 +511,7 @@ export function AdminPanel({
             Votos Registrados
           </span>
           <div className={styles.statNumber}>
-            {votesReceivedCount} <span style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>/ {totalParticipants}</span>
+            {votesReceivedCount} <span style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>/ {totalMembers}</span>
           </div>
         </div>
 
@@ -284,6 +525,48 @@ export function AdminPanel({
         </div>
       </div>
 
+      {/* Sorteo & Schedule */}
+      <div className="card">
+        <h3 style={{ marginBottom: '4px' }}>Sorteo y Horario de Turnos</h3>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '14px' }}>
+          El sorteo se realiza en la pantalla de TV (aleatorio, con reordenación manual). Aquí puedes generar las horas
+          de cada turno para que salgan en el mensaje de WhatsApp.
+        </p>
+
+        <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
+          <label style={{ fontSize: '13px', fontWeight: 600 }}>Hora de inicio:</label>
+          <input
+            type="text"
+            className="input mono"
+            value={scheduleStart}
+            onChange={(e) => setScheduleStart(e.target.value)}
+            placeholder="14:00"
+            style={{ width: '80px', padding: '6px 8px', fontSize: '13px' }}
+          />
+          <label style={{ fontSize: '13px', fontWeight: 600, marginLeft: '8px' }}>Minutos por tapa:</label>
+          <input
+            type="text"
+            className="input mono"
+            value={scheduleMinutes}
+            onChange={(e) => setScheduleMinutes(e.target.value.replace(/\D/g, ''))}
+            placeholder="15"
+            style={{ width: '64px', padding: '6px 8px', fontSize: '13px' }}
+          />
+          <button type="button" className="btn btn-secondary btn-sm" onClick={handleGenerateSchedule}>
+            Generar horarios
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '14px' }}>
+          {sortedTeams.map((team, index) => (
+            <span key={team.id} className="badge badge-neutral" style={{ textTransform: 'none', fontSize: '11px' }}>
+              #{index + 1} {teamLabel(team, state.members)}
+              {team.tastingTime ? ` · ${team.tastingTime}` : ' · sin hora'}
+            </span>
+          ))}
+        </div>
+      </div>
+
       {/* Privacy Notice Banner */}
       <div className="card" style={{ backgroundColor: 'var(--color-canvas)', borderColor: 'var(--border-color)' }}>
         <div className="flex items-center gap-3">
@@ -293,7 +576,7 @@ export function AdminPanel({
               Privacidad y Secreto de Tapas Garantizado
             </strong>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Para mantener la sorpresa y emoción del concurso, los nombres de tapas, fotos e ingredientes están ocultos en este panel. Solo ves el estado de preparación de cada participante.
+              Para mantener la sorpresa y emoción del concurso, los nombres de tapas, fotos e ingredientes están ocultos en este panel. Solo ves el estado de preparación de cada equipo.
             </p>
           </div>
         </div>
@@ -314,86 +597,87 @@ export function AdminPanel({
         </div>
       </div>
 
-      {/* Participants Management */}
+      {/* Teams Management */}
       <div className="card">
         <div className="flex items-center justify-between" style={{ marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
           <div>
-            <h3>Participantes de este Concurso ({totalParticipants})</h3>
+            <h3>Equipos de este Concurso ({totalTeams} tapas · {totalMembers} personas)</h3>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              Comparte el PIN personal o copia el enlace directo para WhatsApp
+              Hasta 3 personas por tapa. Cada persona tiene su PIN y su voto; la ficha del plato es compartida.
             </span>
           </div>
 
-          {/* Add participant form */}
-          <form onSubmit={handleAddParticipant} style={{ display: 'flex', gap: '8px' }}>
+          {/* Add team form */}
+          <form onSubmit={handleAddTeam} style={{ display: 'flex', gap: '8px' }}>
             <input
               type="text"
               className="input"
-              style={{ padding: '6px 12px', fontSize: '13px', width: '180px' }}
-              placeholder="Nombre del amigo..."
-              value={newParticipantName}
-              onChange={(e) => setNewParticipantName(e.target.value)}
+              style={{ padding: '6px 12px', fontSize: '13px', width: '260px' }}
+              placeholder="Ana, Luis, Marta (máx. 3, separados por comas)"
+              value={newTeamNames}
+              onChange={(e) => setNewTeamNames(e.target.value)}
             />
             <button type="submit" className="btn btn-primary btn-sm">
-              ➕ Añadir
+              ➕ Añadir Equipo
             </button>
           </form>
         </div>
 
+        {/* Bulk actions */}
+        <div className="flex items-center gap-2" style={{ flexWrap: 'wrap', marginBottom: '14px', paddingBottom: '12px', borderBottom: '1px solid var(--border-subtle)' }}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={handleCopyAllLinks}>
+            {isAllLinksCopied ? '✓ Enlaces Copiados' : '📋 Copiar todos los enlaces'}
+          </button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={handleCopyReminder}>
+            {isReminderCopied
+              ? '✓ Recordatorio Copiado'
+              : `⏳ Recordar votación (${pendingMembers.length} pendientes)`}
+          </button>
+        </div>
+
         <div className={styles.votersGrid}>
-          {state.participants.map((p) => {
-            const hasDishName = !!p.dishName && p.dishName.trim().length > 0;
-            const hasPhoto = !!p.photoUrl && p.photoUrl.trim().length > 0;
-            const hasIngredients = p.ingredients && p.ingredients.length > 0;
-            const isComplete = hasDishName && hasPhoto && hasIngredients;
-            const hasVoted = !!state.votes[p.id];
-            const isCopied = copiedParticipantId === p.id;
+          {sortedTeams.map((team) => {
+            const teamMembers = membersOfTeam(team.id, state.members);
+            const isComplete = !!team.dishName && !!team.photoUrl && team.ingredients.length > 0;
+            const hasDishName = !!team.dishName && team.dishName.trim().length > 0;
+            const hasPhoto = !!team.photoUrl && team.photoUrl.trim().length > 0;
+            const takenPins = new Set(
+              state.members.filter((m) => !teamMembers.some((tm) => tm.id === m.id)).map((m) => m.pin)
+            );
 
             return (
-              <div key={p.id} className={styles.voterCard}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: '15px' }}>{p.name}</div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    Turno: <strong>#{p.tastingOrder}</strong> • PIN: <span className="mono" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{p.pin}</span>
+              <div key={team.id} className={styles.voterCard} style={{ flexDirection: 'column', alignItems: 'stretch', gap: '6px' }}>
+                <div className="flex items-center justify-between" style={{ gap: '8px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '14px' }}>
+                    Turno #{team.tastingOrder} · {teamLabel(team, state.members)}
                   </div>
 
-                  <div
-                    className="mono"
-                    style={{
-                      marginTop: '6px',
-                      fontSize: '10px',
-                      color: 'var(--text-muted)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}
-                    title={`Enlace de acceso de ${p.name}`}
-                  >
-                    {buildParticipantLink(state.id, p.pin)}
-                  </div>
+                  <div className="flex items-center gap-1">
+                    {isComplete ? (
+                      <span className="badge badge-green" title="Nombre, ingredientes y fotografía listos">
+                        ✓ Ficha Lista
+                      </span>
+                    ) : !hasPhoto ? (
+                      <span className="badge badge-yellow" title="Falta subir la fotografía de la tapa">
+                        Falta Foto
+                      </span>
+                    ) : (
+                      <span className="badge badge-neutral" title={hasDishName ? 'Pendiente de completar' : 'Falta el nombre del plato'}>
+                        Incompleta
+                      </span>
+                    )}
 
-                  <div style={{ marginTop: '8px', display: 'flex', gap: '6px' }}>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      style={{ fontSize: '11px', padding: '3px 8px' }}
-                      onClick={() => handleCopyParticipantLink(p)}
-                      title="Copiar enlace directo de acceso para enviar por WhatsApp"
-                    >
-                      {isCopied ? '✓ ¡Enlace Copiado!' : '📋 WhatsApp Link'}
-                    </button>
-
-                    {state.participants.length > 3 && (
+                    {state.teams.length > 1 && (
                       <button
                         type="button"
                         className="btn btn-secondary btn-sm"
                         style={{ fontSize: '11px', padding: '3px 8px', color: 'var(--pastel-red-text)' }}
                         onClick={() => {
-                          if (window.confirm(`¿Eliminar a ${p.name} de este concurso?`)) {
-                            onRemoveParticipant(state.id, p.id);
+                          if (window.confirm(`¿Eliminar la tapa del equipo ${teamLabel(team, state.members)}?`)) {
+                            onRemoveTeam(state.id, team.id);
                           }
                         }}
-                        title="Eliminar participante"
+                        title="Eliminar equipo y sus votos"
                       >
                         ✕
                       </button>
@@ -401,25 +685,19 @@ export function AdminPanel({
                   </div>
                 </div>
 
-                <div className="flex flex-col items-end gap-1">
-                  {isComplete ? (
-                    <span className="badge badge-green" title="Nombre, ingredientes y fotografía listos">
-                      ✓ Ficha Lista
-                    </span>
-                  ) : !hasPhoto ? (
-                    <span className="badge badge-yellow" title="Falta subir la fotografía de la tapa">
-                      Falta Foto
-                    </span>
-                  ) : (
-                    <span className="badge badge-neutral" title="Pendiente de rellenar datos">
-                      Incompleta
-                    </span>
-                  )}
-
-                  <span className={`badge ${hasVoted ? 'badge-green' : 'badge-neutral'}`} style={{ fontSize: '10px' }}>
-                    {hasVoted ? 'Ya Votó' : 'Sin Votar'}
-                  </span>
-                </div>
+                {teamMembers.map((member) => (
+                  <MemberRow
+                    key={member.id}
+                    member={member}
+                    hasVoted={!!state.votes[member.id]}
+                    takenPins={takenPins}
+                    copiedMemberId={copiedMemberId}
+                    onCopyLink={handleCopyParticipantLink}
+                    onSavePin={onUpdateMemberPin}
+                    onRegeneratePin={onRegenerateMemberPin}
+                    onRemoveVote={handleRemoveVote}
+                  />
+                ))}
               </div>
             );
           })}

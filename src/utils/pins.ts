@@ -1,12 +1,10 @@
-import { Participant } from '../types/contest';
-
-/** Master PIN that always opens the superadmin console. Never assigned to participants. */
+/** Master PIN that always opens the superadmin console. Never assigned to members. */
 export const MASTER_PIN = '9999';
 
 const PIN_RANGE_START = 1001;
 const PIN_RANGE_END = 1099;
 
-type PinHolder = Pick<Participant, 'id' | 'pin'>;
+type PinHolder = { id: string; pin: string };
 
 export function isValidPin(pin: string): boolean {
   return /^\d{4}$/.test(pin.trim());
