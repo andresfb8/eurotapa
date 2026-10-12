@@ -30,6 +30,13 @@
   - **Sorteo**: rejilla de turnos con números gigantes.
   - Los controles del organizador van en una barra inferior (`canControl`).
 
+## Aspecto claro u oscuro de la TV
+
+El organizador elige en el panel ("Configuración de la Gala" → "Aspecto de la pantalla de TV")
+entre **Claro** (crema, por defecto) y **Oscuro** (gris carbón). Se guarda en el concurso
+(`tvTheme`), así que la TV pública cambia al momento. Las vistas de TV no tienen colores fijos:
+todo sale de los tokens de `[data-theme="tv-light"]` y `[data-theme="tv"]`.
+
 ## Probado en el modo de pruebas (`npm run dev:sandbox`)
 
 - Móvil 375×812: acceso, cata, votación (añadir, arrastrar, hoja de confirmación, sellar) y

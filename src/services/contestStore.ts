@@ -11,7 +11,8 @@ import {
   UserSession,
   UserRole,
   MultiContestData,
-  RemoteContestSummary
+  RemoteContestSummary,
+  TvTheme
 } from '../types/contest';
 import { INITIAL_CONTEST_STATE } from './mockData';
 import { MASTER_PIN, generateUniquePin } from '../utils/pins';
@@ -668,6 +669,13 @@ export function useContest() {
           tastingServedUpTo: Math.max(prev.tastingServedUpTo ?? 0, order)
         };
       });
+    },
+    [updateCurrentContest]
+  );
+
+  const setTvTheme = useCallback(
+    (tvTheme: TvTheme) => {
+      updateCurrentContest((prev) => ({ ...prev, tvTheme }));
     },
     [updateCurrentContest]
   );
@@ -1363,6 +1371,7 @@ export function useContest() {
     nextGalaStep,
     undoGalaStep,
     setGalaMode,
+    setTvTheme,
     generateTastingSchedule,
     clearTastingSchedule,
     simulateSampleVotes,

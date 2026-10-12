@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ContestState, GalaMode, Member } from '../../types/contest';
+import { ContestState, GalaMode, Member, TvTheme } from '../../types/contest';
 import { CreateContestModal } from './CreateContestModal';
 import { buildParticipantLink, buildTvLink, getPublicAppBaseUrl, isLocalOrigin } from '../../utils/appUrl';
 import { membersOfTeam, teamLabel } from '../../utils/teams';
@@ -30,6 +30,7 @@ interface AdminPanelProps {
   onRemoveVote: (memberId: string) => void;
   onSetPhase: (phase: ContestState['phase']) => void;
   onSetGalaMode: (mode: GalaMode) => void;
+  onSetTvTheme: (theme: TvTheme) => void;
   onUpdateAdminPin: (pin: string) => void;
   onGenerateSchedule: (startTime: string, minutesPerTeam: number) => void;
   onClearSchedule: () => void;
@@ -48,6 +49,19 @@ const PHASES: { key: ContestState['phase']; label: string }[] = [
   { key: 'VOTACION', label: '4. Votación Móvil' },
   { key: 'GALA_TV', label: '5. Gala en Vivo' },
   { key: 'PODIO', label: '6. Podio Final' }
+];
+
+const TV_THEMES: { key: TvTheme; label: string; description: string }[] = [
+  {
+    key: 'light',
+    label: 'Claro',
+    description: 'Fondo crema. Es el que mejor se lee con las luces de la sala encendidas.'
+  },
+  {
+    key: 'dark',
+    label: 'Oscuro',
+    description: 'Fondo gris carbón, estilo plató. Luce más con la sala a oscuras o en penumbra.'
+  }
 ];
 
 const GALA_MODES: { key: GalaMode; label: string; description: string }[] = [
@@ -206,6 +220,7 @@ export function AdminPanel({
   onRemoveVote,
   onSetPhase,
   onSetGalaMode,
+  onSetTvTheme,
   onUpdateAdminPin,
   onGenerateSchedule,
   onClearSchedule,
@@ -606,6 +621,22 @@ export function AdminPanel({
         </div>
         <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '10px' }}>
           {GALA_MODES.find((m) => m.key === galaMode)?.description}
+        </p>
+
+        <div style={{ fontSize: '13px', fontWeight: 600, margin: '16px 0 6px' }}>Aspecto de la pantalla de TV</div>
+        <div className={styles.phaseTabs}>
+          {TV_THEMES.map((t) => (
+            <button
+              key={t.key}
+              className={`${styles.phaseTab} ${(state.tvTheme ?? 'light') === t.key ? styles.phaseTabActive : ''}`}
+              onClick={() => onSetTvTheme(t.key)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '10px' }}>
+          {TV_THEMES.find((t) => t.key === (state.tvTheme ?? 'light'))?.description}
         </p>
       </div>
 

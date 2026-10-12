@@ -1,14 +1,19 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
+import { TvTheme } from '../../types/contest';
 import styles from './TVStage.module.css';
 
+/** Token set for each look of the stage. Light (cream) is the default. */
+const themeAttr = (theme?: TvTheme) => (theme === 'dark' ? 'tv' : 'tv-light');
+
 interface TVStageProps {
+  theme?: TvTheme;
   children: ReactNode;
 }
 
-/** Dark, full-size stage for every TV screen. Also what goes fullscreen. */
-export function TVStage({ children }: TVStageProps) {
+/** Full-size stage for every TV screen. Also what goes fullscreen. */
+export function TVStage({ theme, children }: TVStageProps) {
   return (
-    <div className={styles.stage} data-theme="tv" data-tv-stage="">
+    <div className={styles.stage} data-theme={themeAttr(theme)} data-tv-stage="">
       {children}
     </div>
   );
@@ -47,6 +52,7 @@ export function FullscreenButton() {
 interface TVShellProps {
   title: string;
   phaseLabel: string;
+  theme?: TvTheme;
   /** Extra controls for the strip (contest picker). */
   extra?: ReactNode;
   onClose: () => void;
@@ -59,7 +65,7 @@ const CHROME_VISIBLE_MS = 2600;
  * Public TV screen: the stage takes the whole monitor. The only chrome is a thin strip that
  * appears while the mouse moves, with the fullscreen and close buttons.
  */
-export function TVShell({ title, phaseLabel, extra, onClose, children }: TVShellProps) {
+export function TVShell({ title, phaseLabel, theme, extra, onClose, children }: TVShellProps) {
   const [isChromeVisible, setIsChromeVisible] = useState(true);
   const hideTimer = useRef<number | undefined>(undefined);
 
@@ -77,7 +83,7 @@ export function TVShell({ title, phaseLabel, extra, onClose, children }: TVShell
   }, []);
 
   return (
-    <div className={styles.shell} data-theme="tv" data-tv-shell="" onMouseMove={showChrome} onTouchStart={showChrome}>
+    <div className={styles.shell} data-theme={themeAttr(theme)} data-tv-shell="" onMouseMove={showChrome} onTouchStart={showChrome}>
       <header className={`${styles.chrome} ${isChromeVisible ? styles.chromeVisible : ''}`}>
         <div className={styles.chromeGroup}>
           <strong>{title}</strong>
@@ -92,7 +98,7 @@ export function TVShell({ title, phaseLabel, extra, onClose, children }: TVShell
         </div>
       </header>
 
-      <TVStage>{children}</TVStage>
+      <TVStage theme={theme}>{children}</TVStage>
     </div>
   );
 }

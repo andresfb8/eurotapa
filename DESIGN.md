@@ -29,9 +29,13 @@ Una cena entre amigos, no una revista: color, tipografía con carácter y botone
   * Acentos saturados: **tomate** `#E8472B` (acción principal), **azafrán** `#FFB81F` (puntos,
     líder, oro) y **oliva** `#5C8A3A` (confirmado).
   * Pasteles semánticos más vivos para avisos y estados.
-* **Tema TV** (`[data-theme="tv"]`), estilo plató de concurso de cocina: fondo gris carbón (no negro puro, para que aguante con la sala a media luz), grises acero
-  y una "llama" que va del naranja `#FF7A1A` (puntos y destacados) al rojo `#E3261C` (directo y
-  momentos calientes). Sin morados. El color lo ponen las fotos y las cifras.
+* **Tema TV**, con dos aspectos que elige el organizador en el panel (`ContestState.tvTheme`):
+  * **Claro** (`[data-theme="tv-light"]`, por defecto): el mismo crema de los móviles, con los
+    acentos oscurecidos (naranja `#DB5A00`, rojo `#D42A1C`) para que las cifras grandes se lean
+    sobre fondo claro. Es el que aguanta con las luces de la sala encendidas.
+  * **Oscuro** (`[data-theme="tv"]`): gris carbón estilo plató de concurso de cocina, con una
+    "llama" que va del naranja `#FF7A1A` al rojo `#E3261C`. Para salas a oscuras o en penumbra.
+  * Sin morados en ninguno de los dos. El color lo ponen las fotos y las cifras.
 * **Tipografía**: titulares, nombres de plato y cifras grandes en `Bricolage Grotesque` (700–800);
   cuerpo en `Geist`; etiquetas y contadores pequeños en `Geist Mono`.
 * **Forma**: radios de 10–22px, botones píldora con sombra dura desplazada ("pegatina"), bordes de

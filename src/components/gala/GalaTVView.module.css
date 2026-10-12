@@ -367,8 +367,8 @@
 }
 
 .heroMax .heroPoints {
-  color: #FFFFFF;
-  text-shadow: 0 0.04em 0 var(--accent-tomato);
+  color: var(--hero-max);
+  text-shadow: 0 0.04em 0 var(--hero-max-shadow);
 }
 
 @keyframes heroPop {

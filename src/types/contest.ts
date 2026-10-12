@@ -17,6 +17,9 @@ export type GalaStep = 'ESPERANDO' | 'REVELANDO_PUNTOS' | 'COMPLETO';
  */
 export type GalaMode = 'CLASICA' | 'DRAMATICA' | 'MAXIMA' | 'DIRECTA';
 
+/** Look of the TV screens: light (cream, the default) or dark (charcoal studio). */
+export type TvTheme = 'light' | 'dark';
+
 export type UserRole = 'superadmin' | 'participant' | 'tv';
 
 export interface UserSession {
@@ -101,6 +104,7 @@ export interface ContestState {
   tastingServedUpTo?: number;
   gala: GalaState;
   galaMode?: GalaMode; // Defaults to CLASICA when missing (legacy contests)
+  tvTheme?: TvTheme; // Defaults to light when missing
   createdAt?: string;
   updatedAt: string;
 }

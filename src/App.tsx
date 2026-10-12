@@ -35,6 +35,7 @@ export function App() {
     nextGalaStep,
     undoGalaStep,
     setGalaMode,
+    setTvTheme,
     generateTastingSchedule,
     clearTastingSchedule,
     simulateSampleVotes,
@@ -199,6 +200,7 @@ export function App() {
       <TVShell
         title={state.title}
         phaseLabel={PHASE_LABELS[state.phase]}
+        theme={state.tvTheme}
         onClose={logout}
         extra={
           contestsList.length > 1 && (
@@ -257,6 +259,7 @@ export function App() {
             onRemoveVote={removeVote}
             onSetPhase={setPhase}
             onSetGalaMode={setGalaMode}
+            onSetTvTheme={setTvTheme}
             onGenerateSchedule={generateTastingSchedule}
             onClearSchedule={clearTastingSchedule}
             onReorder={reorderTasting}
@@ -267,7 +270,7 @@ export function App() {
             onLogout={logout}
           />
         ) : (
-          <TVStage>{renderTVContent(true)}</TVStage>
+          <TVStage theme={state.tvTheme}>{renderTVContent(true)}</TVStage>
         )}
       </main>
     </div>

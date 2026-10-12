@@ -135,6 +135,7 @@ export function normalizeContest(raw: unknown): ContestState | null {
     members,
     votes,
     ...(isNonEmptyString(data.drawDoneAt) ? { drawDoneAt: data.drawDoneAt } : {}),
+    ...(data.tvTheme === 'dark' || data.tvTheme === 'light' ? { tvTheme: data.tvTheme } : {}),
     ...(typeof data.tastingServedUpTo === 'number' ? { tastingServedUpTo: data.tastingServedUpTo } : {}),
     activeTastingId,
     gala: normalizeGala(data.gala),

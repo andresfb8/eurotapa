@@ -136,6 +136,60 @@
   --shadow-card: none;
   --shadow-float: 0 18px 50px rgba(0, 0, 0, 0.6);
 
+  /* Stage-only values */
+  --stage-top: #24242A;
+  --control-bar: rgba(0, 0, 0, 0.45);
+  --hero-max: #FFFFFF;
+  --hero-max-shadow: var(--accent-tomato);
+
+  background-color: var(--color-canvas);
+  color: var(--text-body);
+}
+
+/*
+ * Light TV stage (the default): the same cream as the phones. It holds its contrast with the room
+ * lights on, which a dark screen does not. Accents are deepened so big numbers stay readable on
+ * a light background.
+ */
+[data-theme='tv-light'] {
+  --color-canvas: #FFF4E3;
+  --color-canvas-subtle: #FFF9EE;
+  --color-surface: #FFFFFF;
+  --color-surface-hover: #FFF8EC;
+  --color-surface-active: #FBE7C6;
+
+  --border-color: #E4D2B3;
+  --border-color-strong: #BFA983;
+
+  --text-primary: #161514;
+  --text-body: #2E2B28;
+  --text-muted: #5E5852;
+  --text-subtle: #857E77;
+
+  --accent-saffron: #DB5A00;
+  --accent-saffron-soft: #FFD7B0;
+  --accent-tomato: #D42A1C;
+
+  --accent: var(--accent-saffron);
+  --accent-hover: #C24F00;
+  --on-accent: #FFFFFF;
+  --ink: #161514;
+
+  --pastel-yellow-bg: #FFE3C2;
+  --pastel-yellow-text: #9A3F00;
+
+  --medal-gold: #C98600;
+  --medal-silver: #7F8590;
+  --medal-bronze: #B0612A;
+
+  --shadow-card: none;
+  --shadow-float: 0 18px 40px rgba(18, 18, 18, 0.18);
+
+  --stage-top: #FFFBF4;
+  --control-bar: rgba(22, 21, 20, 0.06);
+  --hero-max: var(--accent-tomato);
+  --hero-max-shadow: var(--accent-saffron-soft);
+
   background-color: var(--color-canvas);
   color: var(--text-body);
 }
