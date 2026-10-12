@@ -104,9 +104,26 @@ el concurso de demostración guardado solo en el navegador: no lee ni escribe en
 y usa claves de `localStorage` propias. Sirve para recorrer todas las fases sin tocar
 concursos reales. PIN de demo: `9999` (organizador) y `1001`… (participantes).
 
+## 7. Un PIN de organizador por concurso
+
+`9999` deja de ser una llave maestra: cada concurso se abre solo con su `adminPin`
+(`loginWithCode` y los enlaces con `?pin=`). `MASTER_PIN` queda solo como PIN del concurso
+de demostración.
+
+- La sesión de organizador guarda `adminContestIds`: los concursos que abre el PIN tecleado
+  (el elegido y los que compartan ese mismo PIN) más los que cree en esa sesión. El panel
+  solo lista esos; para entrar en otro hay que elegirlo en la pantalla de acceso con su PIN.
+- El PIN se cambia desde el panel ("PIN de organizador", 4 a 8 dígitos, distinto de los PIN
+  de los participantes). Si un concurso sigue con `9999`, el panel muestra un aviso.
+- Los concursos nuevos proponen un PIN aleatorio y los PIN de participantes nunca coinciden
+  con el del organizador.
+
 ## Riesgos aceptados / pendientes
 
 - El bloqueo de la TV es solo de interfaz: las reglas de Firestore siguen abiertas.
-- `MASTER_PIN` (`9999`) sigue abriendo el panel de cualquier concurso.
+- El PIN de organizador se comprueba en el navegador: frena a quien prueba códigos, pero no
+  es una barrera real mientras las reglas de Firestore sigan abiertas.
+- Ya no hay PIN maestro: si se olvida el PIN de un concurso solo se recupera mirando el
+  campo `adminPin` del documento en la consola de Firebase.
 - Reabrir o borrar un voto a mitad de gala cambia la lista de jurados y puede descuadrar el
   índice del jurado actual.

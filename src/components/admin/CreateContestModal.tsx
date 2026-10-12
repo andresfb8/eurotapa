@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { generateAdminPin, isValidAdminPin } from '../../utils/pins';
 
 interface CreateContestModalProps {
   onClose: () => void;
@@ -13,7 +14,8 @@ interface CreateContestModalProps {
 export function CreateContestModal({ onClose, onCreate }: CreateContestModalProps) {
   const [title, setTitle] = useState('');
   const [code, setCode] = useState('');
-  const [adminPin, setAdminPin] = useState('9999');
+  // Every contest gets its own organizer PIN: there is no shared master key
+  const [adminPin, setAdminPin] = useState(generateAdminPin);
   const [teamsText, setTeamsText] = useState('Carlos\nMarta, Luis\nJavier, Elena, David');
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -45,8 +47,13 @@ export function CreateContestModal({ onClose, onCreate }: CreateContestModalProp
       alert('Alguna línea tenía más de 3 nombres: se usarán solo los 3 primeros de cada equipo.');
     }
 
+    if (!isValidAdminPin(adminPin)) {
+      alert('El PIN de organizador debe tener entre 4 y 8 dígitos.');
+      return;
+    }
+
     // PINs are assigned by the store, guaranteeing they are unique inside the contest
-    onCreate(title.trim(), code.trim() || undefined, adminPin.trim() || '9999', teams);
+    onCreate(title.trim(), code.trim() || undefined, adminPin.trim(), teams);
     onClose();
   };
 
@@ -127,19 +134,19 @@ export function CreateContestModal({ onClose, onCreate }: CreateContestModalProp
 
             <div>
               <label style={{ fontSize: '13px', fontWeight: 600, display: 'block', marginBottom: '6px' }}>
-                PIN Superadmin
+                PIN de organizador
               </label>
               <input
                 type="text"
+                inputMode="numeric"
                 className="input mono"
-                maxLength={6}
+                maxLength={8}
                 value={adminPin}
-                onChange={(e) => setAdminPin(e.target.value)}
-                placeholder="9999"
+                onChange={(e) => setAdminPin(e.target.value.replace(/\D/g, ''))}
                 required
               />
               <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '2px' }}>
-                PIN para administrar este concurso
+                Apúntalo: es la única llave del panel de este concurso
               </span>
             </div>
           </div>

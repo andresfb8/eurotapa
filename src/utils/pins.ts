@@ -1,5 +1,22 @@
-/** Master PIN that always opens the superadmin console. Never assigned to members. */
+/**
+ * Default organizer PIN of the demo contest. It is NOT a master key: every contest only opens with
+ * its own `adminPin`. Never assigned to members.
+ */
 export const MASTER_PIN = '9999';
+
+/** Organizer PINs may be longer than the 4 digits of a member PIN. */
+export function isValidAdminPin(pin: string): boolean {
+  return /^\d{4,8}$/.test(pin.trim());
+}
+
+/** A fresh organizer PIN outside the 1001-1099 range used for members. */
+export function generateAdminPin(): string {
+  let pin = MASTER_PIN;
+  while (pin === MASTER_PIN) {
+    pin = String(1100 + Math.floor(Math.random() * 8900));
+  }
+  return pin;
+}
 
 const PIN_RANGE_START = 1001;
 const PIN_RANGE_END = 1099;

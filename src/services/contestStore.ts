@@ -167,6 +167,14 @@ async function fetchContestFromCloud(contestId: string): Promise<ContestState | 
   }
 }
 
+/** Contests an organizer PIN opens: the one it was typed for plus any other sharing that same PIN. */
+function adminContestIdsFor(multi: MultiContestData, pin: string, contestId: string): string[] {
+  const ids = Object.values(multi.contests)
+    .filter((c) => c.adminPin === pin)
+    .map((c) => c.id);
+  return ids.includes(contestId) ? ids : [contestId, ...ids];
+}
+
 interface BootstrapResult {
   multi: MultiContestData;
   session: UserSession | null;
@@ -221,21 +229,25 @@ async function resolveAccessFromUrl(
     };
   }
 
-  if (params.pin === MASTER_PIN) {
-    return {
-      multi,
-      session: { role: 'superadmin', contestId: contest?.id || multi.activeContestId },
-      error: null,
-      injectedContest
-    };
-  }
-
   if (contest) {
     const matched = contest.members.find((m) => m.pin === params.pin);
     if (matched) {
       return {
         multi,
         session: { role: 'participant', contestId: contest.id, participantId: matched.id },
+        error: null,
+        injectedContest
+      };
+    }
+    // Organizer: only the PIN of this very contest opens it
+    if (contest.adminPin === params.pin) {
+      return {
+        multi,
+        session: {
+          role: 'superadmin',
+          contestId: contest.id,
+          adminContestIds: adminContestIdsFor(multi, params.pin, contest.id)
+        },
         error: null,
         injectedContest
       };
@@ -576,7 +588,8 @@ export function useContest() {
       updateCurrentContest((prev) => {
         const member = prev.members.find((m) => m.id === memberId);
         if (!member) return prev;
-        const pin = generateUniquePin(prev.members);
+        // The organizer PIN counts as taken, so a member can never end up sharing it
+        const pin = generateUniquePin([...prev.members, { id: '__admin', pin: prev.adminPin }]);
         return {
           ...prev,
           members: prev.members.map((m) => (m.id === memberId ? { ...m, pin } : m))
@@ -962,7 +975,7 @@ export function useContest() {
           members.push({
             id: `m_${seed}_${teamIdx + 1}_${memberIdx + 1}`,
             name,
-            pin: generateUniquePin(members),
+            pin: generateUniquePin([...members, { id: '__admin', pin: adminPin.trim() }]),
             teamId
           });
         });
@@ -999,6 +1012,22 @@ export function useContest() {
           }
         };
         return persistMultiData(next);
+      });
+
+      // Whoever creates a contest manages it from this session
+      setSession((prevSession) => {
+        if (!prevSession || prevSession.role !== 'superadmin') return prevSession;
+        const updated: UserSession = {
+          ...prevSession,
+          contestId,
+          adminContestIds: [...(prevSession.adminContestIds ?? [prevSession.contestId]), contestId]
+        };
+        try {
+          localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
+        } catch {
+          // ignore
+        }
+        return updated;
       });
 
       return contestId;
@@ -1071,7 +1100,7 @@ export function useContest() {
         const teamId = `t_${seed}_${Math.random().toString(36).slice(2, 5)}`;
         const newMembers: Member[] = [];
         names.forEach((name, idx) => {
-          const pin = generateUniquePin([...contest.members, ...newMembers]);
+          const pin = generateUniquePin([...contest.members, ...newMembers, { id: '__admin', pin: contest.adminPin }]);
           newMembers.push({
             id: `m_${seed}_${idx + 1}`,
             name,
@@ -1244,9 +1273,13 @@ export function useContest() {
         }
       }
 
-      // Superadmin: universal master PIN or the admin PIN of the selected contest only
-      if (code === MASTER_PIN || (chosenContest && chosenContest.adminPin === code)) {
-        const newSession: UserSession = { role: 'superadmin', contestId: chosenContest?.id || effectiveContestId };
+      // Organizer: only the admin PIN of the selected contest opens it (there is no master PIN)
+      if (chosenContest && chosenContest.adminPin === code) {
+        const newSession: UserSession = {
+          role: 'superadmin',
+          contestId: chosenContest.id,
+          adminContestIds: adminContestIdsFor(multiData, code, chosenContest.id)
+        };
         saveSession(newSession);
         return { success: true, role: 'superadmin' };
       }
@@ -1338,6 +1371,10 @@ export function useContest() {
     // Multi-contest state & management
     multiData,
     contestsList: Object.values(multiData.contests),
+    // Contests this organizer session has the PIN for (legacy sessions: just the one they are in)
+    adminContestsList: Object.values(multiData.contests).filter((c) =>
+      (session?.adminContestIds ?? (session ? [session.contestId] : [])).includes(c.id)
+    ),
     activeContestId,
     createContest,
     switchContest,

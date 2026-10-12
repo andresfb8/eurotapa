@@ -24,6 +24,11 @@ export interface UserSession {
   contestId: string;
   /** Member id (a person), not the team id. */
   participantId?: string;
+  /**
+   * Organizer sessions: contests opened by the PIN that was typed. Each contest obeys only its
+   * own PIN, so the console never shows a contest whose PIN has not been entered.
+   */
+  adminContestIds?: string[];
 }
 
 /** A tapa cooked by a team of 1 to 3 members. It is the scoring unit. */

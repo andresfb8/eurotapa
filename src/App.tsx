@@ -31,6 +31,8 @@ export function App() {
 
     // Multi-contest
     contestsList,
+    adminContestsList,
+    updateContestMeta,
     activeContestId,
     createContest,
     switchContest,
@@ -249,7 +251,8 @@ export function App() {
         {adminTab === 'admin' ? (
           <AdminPanel
             state={state}
-            contests={contestsList}
+            contests={adminContestsList}
+            onUpdateAdminPin={(pin) => updateContestMeta(state.id, { adminPin: pin })}
             onSelectContest={switchContest}
             onCreateContest={createContest}
             onDeleteContest={deleteContest}

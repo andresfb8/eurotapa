@@ -4,7 +4,7 @@ import { CreateContestModal } from './CreateContestModal';
 import { buildParticipantLink, buildTvLink, getPublicAppBaseUrl, isLocalOrigin } from '../../utils/appUrl';
 import { membersOfTeam, teamLabel } from '../../utils/teams';
 import { formatVotingReminder } from '../../utils/whatsappExport';
-import { isValidPin } from '../../utils/pins';
+import { MASTER_PIN, isValidAdminPin, isValidPin } from '../../utils/pins';
 import { formatDrawDate } from '../../utils/dates';
 import { runAnimatedDraw } from '../../utils/draw';
 import { formatTastingScheduleForWhatsApp } from '../../utils/whatsappExport';
@@ -30,6 +30,7 @@ interface AdminPanelProps {
   onRemoveVote: (memberId: string) => void;
   onSetPhase: (phase: ContestState['phase']) => void;
   onSetGalaMode: (mode: GalaMode) => void;
+  onUpdateAdminPin: (pin: string) => void;
   onGenerateSchedule: (startTime: string, minutesPerTeam: number) => void;
   onClearSchedule: () => void;
   onReorder: (orderedIds: string[]) => void;
@@ -205,6 +206,7 @@ export function AdminPanel({
   onRemoveVote,
   onSetPhase,
   onSetGalaMode,
+  onUpdateAdminPin,
   onGenerateSchedule,
   onClearSchedule,
   onReorder,
@@ -223,6 +225,31 @@ export function AdminPanel({
   const [scheduleStart, setScheduleStart] = useState('14:00');
   const [scheduleMinutes, setScheduleMinutes] = useState('15');
   const [isShuffling, setIsShuffling] = useState(false);
+  const [adminPinDraft, setAdminPinDraft] = useState(state.adminPin);
+  const [adminPinError, setAdminPinError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setAdminPinDraft(state.adminPin);
+    setAdminPinError(null);
+  }, [state.id, state.adminPin]);
+
+  const commitAdminPin = () => {
+    const clean = adminPinDraft.trim();
+    if (clean === state.adminPin) {
+      setAdminPinError(null);
+      return;
+    }
+    if (!isValidAdminPin(clean)) {
+      setAdminPinError('El PIN de organizador debe tener entre 4 y 8 dígitos.');
+      return;
+    }
+    if (state.members.some((m) => m.pin === clean)) {
+      setAdminPinError('Ese PIN ya es el de un participante de este concurso.');
+      return;
+    }
+    setAdminPinError(null);
+    onUpdateAdminPin(clean);
+  };
   const [isRedrawConfirmOpen, setIsRedrawConfirmOpen] = useState(false);
   const [isOrderCopied, setIsOrderCopied] = useState(false);
 
@@ -373,7 +400,25 @@ export function AdminPanel({
           <div>
             <div className="flex items-center gap-2">
               <span className="badge badge-green">Superadmin</span>
-              <span className="badge badge-neutral">PIN Maestro: {state.adminPin}</span>
+              <label className="badge badge-neutral" style={{ gap: '6px' }} title="PIN para entrar al panel de este concurso (editable)">
+                PIN de organizador:
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  className="input mono"
+                  maxLength={8}
+                  value={adminPinDraft}
+                  onChange={(e) => setAdminPinDraft(e.target.value.replace(/\D/g, ''))}
+                  onBlur={commitAdminPin}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      (e.target as HTMLInputElement).blur();
+                    }
+                  }}
+                  style={{ width: '84px', padding: '2px 6px', fontSize: '12px', textAlign: 'center' }}
+                />
+              </label>
               {state.code && <span className="badge badge-blue">Código: {state.code}</span>}
             </div>
             <h1 style={{ fontSize: '1.9rem', marginTop: '6px' }}>{state.title}</h1>
@@ -484,6 +529,25 @@ export function AdminPanel({
           </div>
         </div>
       </div>
+
+      {/* Organizer PIN warnings */}
+      {(adminPinError || state.adminPin === MASTER_PIN) && (
+        <div className="card" style={{ backgroundColor: 'var(--pastel-yellow-bg)', borderColor: '#EBD9A6' }}>
+          <div className="flex items-center gap-3">
+            <AlertIcon style={{ width: '20px', height: '20px', color: 'var(--pastel-yellow-text)', flexShrink: 0 }} />
+            <div style={{ fontSize: '13px', color: 'var(--pastel-yellow-text)' }}>
+              {adminPinError ? (
+                <strong>{adminPinError}</strong>
+              ) : (
+                <>
+                  <strong>Este concurso usa el PIN por defecto ({MASTER_PIN}).</strong> Cualquiera que lo pruebe entra
+                  como organizador: cámbialo arriba, en "PIN de organizador", y apúntalo. Es la única llave de este panel.
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Local server notice */}
       {isLocal && (
@@ -786,9 +850,9 @@ export function AdminPanel({
             const isComplete = !!team.dishName && !!team.photoUrl && team.ingredients.length > 0;
             const hasDishName = !!team.dishName && team.dishName.trim().length > 0;
             const hasPhoto = !!team.photoUrl && team.photoUrl.trim().length > 0;
-            const takenPins = new Set(
+            const takenPins = new Set([state.adminPin].concat(
               state.members.filter((m) => !teamMembers.some((tm) => tm.id === m.id)).map((m) => m.pin)
-            );
+            ));
 
             return (
               <div key={team.id} className={styles.voterCard} style={{ flexDirection: 'column', alignItems: 'stretch', gap: '6px' }}>

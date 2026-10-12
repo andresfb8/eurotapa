@@ -199,7 +199,7 @@ export function LoginView({
               <strong>Participantes:</strong> Cada amigo introduce su código personal (ej: <code>1001</code> Carlos, <code>1002</code> Marta, <code>1003</code> Javier...).
             </div>
             <div style={{ marginTop: '4px' }}>
-              <strong>Superadmin:</strong> PIN maestro <code>9999</code> para gestionar concursos, fases y participantes.
+              <strong>Organizador:</strong> el concurso de demostración se abre con <code>9999</code>; cada concurso tiene su propio PIN.
             </div>
           </div>
         )}
