@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ContestPhase, GalaState, Member, Team, VoteRecord } from '../../types/contest';
+import { ContestPhase, GalaState, Member, Team, VoteMode, VoteRecord } from '../../types/contest';
 import { buildJuryVotes } from '../../utils/juries';
 import { calculateScoreboard } from '../../utils/scoring';
 import { membersOfTeam, teamLabel } from '../../utils/teams';
@@ -13,7 +13,9 @@ interface GalaCompanionProps {
   votes: Record<string, VoteRecord>;
   gala: GalaState;
   phase: ContestPhase;
+  voteMode: VoteMode;
   currentTeam: Team;
+  currentMemberId: string;
 }
 
 const pts = (n: number) => `${n} ${n === 1 ? 'punto' : 'puntos'}`;
@@ -23,18 +25,34 @@ const pts = (n: number) => `${n} ${n === 1 ? 'punto' : 'puntos'}`;
  * It only ever shows points that have already been revealed on the TV, and turns into a personal
  * summary once the podium is out.
  */
-export function GalaCompanion({ title, teams, members, votes, gala, phase, currentTeam }: GalaCompanionProps) {
+export function GalaCompanion({
+  title,
+  teams,
+  members,
+  votes,
+  gala,
+  phase,
+  voteMode,
+  currentTeam,
+  currentMemberId
+}: GalaCompanionProps) {
   const [isCopied, setIsCopied] = useState(false);
 
-  const juries = useMemo(() => buildJuryVotes(teams, members, votes), [teams, members, votes]);
+  const juries = useMemo(
+    () => buildJuryVotes(teams, members, votes, voteMode),
+    [teams, members, votes, voteMode]
+  );
   const isFinal = phase === 'PODIO' || gala.currentVoterIndex >= juries.length;
 
   const scoreboard = useMemo(
     () =>
       isFinal
-        ? calculateScoreboard(teams, members, votes)
-        : calculateScoreboard(teams, members, votes, { currentVoterIndex: gala.currentVoterIndex, galaState: gala }),
-    [teams, members, votes, gala, isFinal]
+        ? calculateScoreboard(teams, members, votes, voteMode)
+        : calculateScoreboard(teams, members, votes, voteMode, {
+            currentVoterIndex: gala.currentVoterIndex,
+            galaState: gala
+          }),
+    [teams, members, votes, voteMode, gala, isFinal]
   );
 
   const isTeam = membersOfTeam(currentTeam.id, members).length > 1;
@@ -43,7 +61,13 @@ export function GalaCompanion({ title, teams, members, votes, gala, phase, curre
   const above = mineIndex > 0 ? scoreboard[mineIndex - 1] : undefined;
 
   const currentJury = isFinal ? undefined : juries[gala.currentVoterIndex];
-  const isMyJuryOnAir = currentJury?.teamId === currentTeam.id;
+  // My own jury: me in individual voting, my team in combined voting
+  const myJuryId = voteMode === 'individual' ? currentMemberId : currentTeam.id;
+  const isMyJuryOnAir = currentJury?.id === myJuryId;
+  // A teammate voting never gives points to our own tapa
+  const isOwnTeamOnAir = currentJury?.teamId === currentTeam.id;
+  // "Your vote" is the team's only when the team votes as one
+  const isSharedVote = isTeam && voteMode === 'team';
 
   // Points each rival jury has given to this tapa, limited to what the TV has already shown
   const received = juries
@@ -69,13 +93,13 @@ export function GalaCompanion({ title, teams, members, votes, gala, phase, curre
   // The reveal that has just happened on the TV, when it was for this tapa
   const justAwarded =
     currentJury &&
-    !isMyJuryOnAir &&
+    !isOwnTeamOnAir &&
     (gala.lastAwardedTapaId === currentTeam.id || (gala.lastBatchIds ?? []).includes(currentTeam.id)) &&
     gala.revealedTapaIds.includes(currentTeam.id)
       ? currentJury.scores[currentTeam.id]
       : undefined;
 
-  const myJury = juries.find((jury) => jury.teamId === currentTeam.id);
+  const myJury = juries.find((jury) => jury.id === myJuryId);
   const myJuryRevealed = myJury
     ? Object.entries(myJury.scores)
         .filter(([teamId]) => isFinal || !isMyJuryOnAir || gala.revealedTapaIds.includes(teamId))
@@ -109,8 +133,8 @@ export function GalaCompanion({ title, teams, members, votes, gala, phase, curre
     const rows = sorted ? [...received].sort((a, b) => b.points - a.points) : [...received].reverse();
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        {rows.map((row) => (
-          <div key={row.name} className={styles.companionRow}>
+        {rows.map((row, index) => (
+          <div key={`${row.name}-${index}`} className={styles.companionRow}>
             <span style={{ flex: 1, minWidth: 0 }}>{row.name}</span>
             <span className="mono" style={{ flexShrink: 0, fontWeight: 700 }}>+{row.points}</span>
           </div>
@@ -174,7 +198,7 @@ export function GalaCompanion({ title, teams, members, votes, gala, phase, curre
         {myJuryRevealed.length > 0 && (
           <div>
             <div className={styles.rankSectionTitle} style={{ marginBottom: '6px' }}>
-              {isTeam ? 'El voto de vuestro equipo' : 'Tu voto'}
+              {isSharedVote ? 'El voto de vuestro equipo' : 'Tu voto'}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               {myJuryRevealed.map((row) => (
@@ -213,7 +237,7 @@ export function GalaCompanion({ title, teams, members, votes, gala, phase, curre
 
       {isMyJuryOnAir && (
         <div className={`${styles.companionNote} ${styles.companionNoteLive}`}>
-          <strong>{isTeam ? 'Vuestro voto está en directo.' : 'Tu voto está en directo.'}</strong>{' '}
+          <strong>{isSharedVote ? 'Vuestro voto está en directo.' : 'Tu voto está en directo.'}</strong>{' '}
           {myJuryRevealed.length === 0
             ? 'Atentos a la pantalla.'
             : `Ya se han revelado ${myJuryRevealed.length} de ${Object.keys(myJury?.scores ?? {}).length}.`}
@@ -247,7 +271,7 @@ export function GalaCompanion({ title, teams, members, votes, gala, phase, curre
       {isMyJuryOnAir && myJuryRevealed.length > 0 && (
         <div>
           <div className={styles.rankSectionTitle} style={{ marginBottom: '6px' }}>
-            {isTeam ? 'Vuestros puntos revelados' : 'Tus puntos revelados'}
+            {isSharedVote ? 'Vuestros puntos revelados' : 'Tus puntos revelados'}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
             {myJuryRevealed.map((row) => (

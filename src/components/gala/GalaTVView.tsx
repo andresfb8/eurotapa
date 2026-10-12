@@ -1,5 +1,5 @@
 import { CSSProperties, useMemo } from 'react';
-import { GalaMode, GalaState, Member, Team, VoteRecord, ContestPhase } from '../../types/contest';
+import { GalaMode, GalaState, Member, Team, VoteMode, VoteRecord, ContestPhase } from '../../types/contest';
 import { calculateScoreboard } from '../../utils/scoring';
 import { teamLabel } from '../../utils/teams';
 import { buildJuryVotes } from '../../utils/juries';
@@ -18,6 +18,8 @@ interface GalaTVViewProps {
   gala: GalaState;
   phase: ContestPhase;
   galaMode?: GalaMode;
+  /** Whether each person or each team is a jury. */
+  voteMode: VoteMode;
   /** False on the public TV screen: reveals are driven only from the admin console. */
   canControl: boolean;
   onNextGalaStep: () => void;
@@ -35,15 +37,16 @@ export function GalaTVView({
   gala,
   phase,
   galaMode,
+  voteMode,
   canControl,
   onNextGalaStep,
   onUndoGalaStep,
   onRestart
 }: GalaTVViewProps) {
-  // Juries: one per tapa, with the combined vote of the team members who have voted
+  // Juries: every person who voted, or one combined vote per tapa
   const votersList = useMemo(
-    () => buildJuryVotes(teams, members, votes),
-    [teams, members, votes]
+    () => buildJuryVotes(teams, members, votes, voteMode),
+    [teams, members, votes, voteMode]
   );
 
   const currentVoter = votersList[gala.currentVoterIndex];
@@ -53,11 +56,11 @@ export function GalaTVView({
 
   // Real-time animated scoreboard based on current reveal progress
   const scoreboard = useMemo(() => {
-    return calculateScoreboard(teams, members, votes, {
+    return calculateScoreboard(teams, members, votes, voteMode, {
       currentVoterIndex: gala.currentVoterIndex,
       galaState: gala
     });
-  }, [teams, members, votes, gala]);
+  }, [teams, members, votes, voteMode, gala]);
 
   // Votes from the current jury in ASCENDING order (1 pt, 2 pts, ..., max pts).
   // This hook must run on every render, before the podium early return, so the hook order stays stable.
@@ -104,7 +107,7 @@ export function GalaTVView({
 
   // If in PODIO phase, show grand podium
   if (phase === 'PODIO' || gala.currentVoterIndex >= votersList.length) {
-    const finalScoreboard = calculateScoreboard(teams, members, votes);
+    const finalScoreboard = calculateScoreboard(teams, members, votes, voteMode);
     return <PodiumView finalRanking={finalScoreboard} canControl={canControl} onRestart={onRestart} />;
   }
 
@@ -138,7 +141,7 @@ export function GalaTVView({
           <span className={styles.juryDots} aria-hidden="true">
             {votersList.map((jury, index) => (
               <span
-                key={jury.teamId}
+                key={jury.id}
                 className={`${styles.juryDot} ${
                   index < gala.currentVoterIndex
                     ? styles.juryDotDone

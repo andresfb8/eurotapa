@@ -91,7 +91,7 @@ export function LoginView({
           <div>
             <h1 className={styles.title}>EuroTapa</h1>
             <p className={styles.subtitle}>
-              Concurso Gastronómico entre Amigos con la emoción de la gala de Eurovisión
+              El concurso de tapas entre amigos que se vota como Eurovisión
             </p>
           </div>
         </div>
@@ -123,9 +123,9 @@ export function LoginView({
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           <div className={styles.pinInputWrapper}>
             <div className={styles.pinLabel}>
-              <span>Introduce tu Código o PIN</span>
+              <span>Introduce tu PIN</span>
               <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '12px' }}>
-                4 dígitos
+                El de tu enlace de acceso
               </span>
             </div>
 
@@ -179,9 +179,9 @@ export function LoginView({
                 type="button"
                 className={`btn btn-secondary ${styles.rulesBtn}`}
                 onClick={() => setIsRulesOpen(true)}
-                title="Consultar la normativa y sistema de votación"
+                title="Cómo funciona el concurso y cómo se vota"
               >
-                ? Reglas
+                ? Cómo funciona
               </button>
             </div>
           </div>

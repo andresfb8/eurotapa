@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ContestState, GalaMode, Member, TvTheme } from '../../types/contest';
+import { ContestState, GalaMode, Member, TvTheme, VoteModeSetting } from '../../types/contest';
+import { effectiveVoteMode, teamsAreEvenlySized } from '../../utils/juries';
 import { CreateContestModal } from './CreateContestModal';
 import { buildParticipantLink, buildTvLink, getPublicAppBaseUrl, isLocalOrigin } from '../../utils/appUrl';
 import { membersOfTeam, teamLabel } from '../../utils/teams';
@@ -31,6 +32,7 @@ interface AdminPanelProps {
   onSetPhase: (phase: ContestState['phase']) => void;
   onSetGalaMode: (mode: GalaMode) => void;
   onSetTvTheme: (theme: TvTheme) => void;
+  onSetVoteMode: (mode: VoteModeSetting) => void;
   onUpdateAdminPin: (pin: string) => void;
   onGenerateSchedule: (startTime: string, minutesPerTeam: number) => void;
   onClearSchedule: () => void;
@@ -49,6 +51,12 @@ const PHASES: { key: ContestState['phase']; label: string }[] = [
   { key: 'VOTACION', label: '4. Votación Móvil' },
   { key: 'GALA_TV', label: '5. Gala en Vivo' },
   { key: 'PODIO', label: '6. Podio Final' }
+];
+
+const VOTE_MODES: { key: VoteModeSetting; label: string }[] = [
+  { key: 'auto', label: 'Automático' },
+  { key: 'individual', label: 'Individual' },
+  { key: 'team', label: 'Combinado por equipo' }
 ];
 
 const TV_THEMES: { key: TvTheme; label: string; description: string }[] = [
@@ -144,14 +152,14 @@ function MemberRow({
         flexWrap: 'wrap'
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 600, fontSize: '13px' }}>{member.name}</span>
         <span className={`badge ${hasVoted ? 'badge-green' : 'badge-neutral'}`} style={{ fontSize: '10px' }}>
           {hasVoted ? 'Ya Votó' : 'Sin Votar'}
         </span>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
         <input
           type="text"
           className="input mono"
@@ -197,7 +205,7 @@ function MemberRow({
             className="btn btn-secondary btn-sm"
             style={{ fontSize: '11px', padding: '3px 8px', color: 'var(--pastel-red-text)' }}
             onClick={() => onRemoveVote(member)}
-            title="Reabrir el voto sellado de esta persona"
+            title="Borra su voto sellado para que pueda votar otra vez (solo durante la votación)"
           >
             Reabrir voto
           </button>
@@ -221,6 +229,7 @@ export function AdminPanel({
   onSetPhase,
   onSetGalaMode,
   onSetTvTheme,
+  onSetVoteMode,
   onUpdateAdminPin,
   onGenerateSchedule,
   onClearSchedule,
@@ -282,6 +291,9 @@ export function AdminPanel({
   const sortedTeams = [...state.teams].sort((a, b) => a.tastingOrder - b.tastingOrder);
   const pendingMembers = state.members.filter((m) => !state.votes[m.id]);
   const hasSchedule = state.teams.some((t) => !!t.tastingTime);
+  const voteModeSetting: VoteModeSetting = state.voteMode ?? 'auto';
+  const voteMode = effectiveVoteMode(state.teams, state.members, state.voteMode);
+  const evenTeams = teamsAreEvenlySized(state.teams, state.members);
   const galaMode: GalaMode = state.galaMode ?? 'CLASICA';
 
   const handleAddTeam = (e: React.FormEvent) => {
@@ -347,7 +359,7 @@ export function AdminPanel({
   const handleRemoveVote = (member: Member) => {
     if (
       window.confirm(
-        `¿Reabrir el voto de ${member.name}? Podrá volver a votar. Si la gala ya había comenzado, usa "Deshacer" o reinicia la gala para evitar descuadres.`
+        `¿Reabrir el voto de ${member.name}? Podrá volver a votar mientras la fase sea "Votación". Con la gala ya empezada su voto se pierde y no puede repetirlo.`
       )
     ) {
       onRemoveVote(member.id);
@@ -412,8 +424,8 @@ export function AdminPanel({
         }}
       >
         <div className="flex items-center justify-between" style={{ flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <div className="flex items-center gap-2">
+          <div style={{ minWidth: 0 }}>
+            <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
               <span className="badge badge-green">Superadmin</span>
               <label className="badge badge-neutral" style={{ gap: '6px' }} title="PIN para entrar al panel de este concurso (editable)">
                 PIN de organizador:
@@ -436,16 +448,16 @@ export function AdminPanel({
               </label>
               {state.code && <span className="badge badge-blue">Código: {state.code}</span>}
             </div>
-            <h1 style={{ fontSize: '1.9rem', marginTop: '6px' }}>{state.title}</h1>
+            <h1 style={{ fontSize: '1.9rem', marginTop: '6px', overflowWrap: 'anywhere' }}>{state.title}</h1>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
             {onOpenTV && (
               <button
                 type="button"
                 className="btn btn-secondary btn-sm"
                 onClick={onOpenTV}
-                title="Abrir pantalla de proyección para la TV"
+                title="Ver la pantalla de TV con tus controles de organizador"
               >
                 Modo TV
               </button>
@@ -455,7 +467,7 @@ export function AdminPanel({
               type="button"
               className="btn btn-secondary btn-sm"
               onClick={handleCopyTvLink}
-              title="Copiar enlace para abrir la pantalla de TV en otro dispositivo"
+              title="Copia el enlace de la pantalla pública: se abre sin PIN y no tiene controles"
             >
               {isTvLinkCopied && <CheckIcon />}
               {isTvLinkCopied ? 'Enlace TV Copiado' : 'Enlace TV'}
@@ -495,13 +507,13 @@ export function AdminPanel({
             borderTop: '1px solid var(--border-subtle)'
           }}
         >
-          <div className="flex items-center gap-2" style={{ flex: 1, minWidth: '240px' }}>
+          <div className="flex items-center gap-2" style={{ flex: '1 1 240px', minWidth: 0, flexWrap: 'wrap' }}>
             <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>
               Administrar concurso:
             </span>
             <select
               className="input"
-              style={{ padding: '6px 12px', fontSize: '13px', width: 'auto', flex: 1, maxWidth: '320px' }}
+              style={{ padding: '6px 12px', fontSize: '13px', width: 'auto', flex: '1 1 160px', minWidth: 0, maxWidth: '320px' }}
               value={state.id}
               onChange={(e) => onSelectContest(e.target.value)}
             >
@@ -598,7 +610,7 @@ export function AdminPanel({
           ))}
         </div>
         <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '10px' }}>
-          Cambiar de fase actualiza automáticamente la pantalla de TV y las opciones visibles en los móviles de los participantes.
+          Cambiar de fase actualiza al momento la pantalla de TV y los móviles. Al pasar a la degustación se empieza por el turno 1, y al pasar a la gala la votación se cierra: quien no haya sellado su voto se queda fuera.
         </p>
       </div>
 
@@ -622,6 +634,34 @@ export function AdminPanel({
         <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '10px' }}>
           {GALA_MODES.find((m) => m.key === galaMode)?.description}
         </p>
+
+        <div style={{ fontSize: '13px', fontWeight: 600, margin: '16px 0 6px' }}>Tipo de voto</div>
+        <div className={styles.phaseTabs}>
+          {VOTE_MODES.map((m) => (
+            <button
+              key={m.key}
+              className={`${styles.phaseTab} ${voteModeSetting === m.key ? styles.phaseTabActive : ''}`}
+              onClick={() => onSetVoteMode(m.key)}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '10px' }}>
+          {voteMode === 'individual'
+            ? 'Individual: cada persona es un jurado y su voto cuenta tal cual. La gala tiene un jurado por persona.'
+            : 'Combinado: los votos de cada equipo se funden en uno. La gala tiene un jurado por tapa.'}{' '}
+          {voteModeSetting === 'auto' &&
+            (evenTeams
+              ? 'Se ha elegido solo porque todos los equipos tienen el mismo tamaño.'
+              : 'Se ha elegido solo porque hay equipos de tamaños distintos.')}{' '}
+          Decídelo antes de empezar la gala.
+        </p>
+        {voteMode === 'individual' && !evenTeams && (
+          <p className="badge badge-yellow" style={{ marginTop: '8px', textTransform: 'none', letterSpacing: 0, padding: '8px 12px', borderRadius: 'var(--radius-sm)', fontSize: '13px' }}>
+            Hay equipos de tamaños distintos: con voto individual, las tapas con más cocineros reciben menos votos que las demás.
+          </p>
+        )}
 
         <div style={{ fontSize: '13px', fontWeight: 600, margin: '16px 0 6px' }}>Aspecto de la pantalla de TV</div>
         <div className={styles.phaseTabs}>
@@ -813,7 +853,7 @@ export function AdminPanel({
               Privacidad y Secreto de Tapas Garantizado
             </strong>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>
-              Para mantener la sorpresa y emoción del concurso, los nombres de tapas, fotos e ingredientes están ocultos en este panel. Solo ves el estado de preparación de cada equipo.
+              Los nombres, fotos e ingredientes de las tapas no aparecen en este panel: solo ves si cada ficha está completa. Cada tapa se descubre en la TV cuando llega su turno.
             </p>
           </div>
         </div>
@@ -825,7 +865,7 @@ export function AdminPanel({
           <div>
             <h3 style={{ color: 'var(--pastel-blue-text)' }}>Simulación Inmediata para Pruebas</h3>
             <p style={{ fontSize: '13px', color: '#1A4D6E', marginTop: '2px' }}>
-              Genera votos de prueba para todos los participantes con 1 clic y pasa directo a la Gala de Eurovisión en TV.
+              Rellena votos al azar para todos y salta directo a la gala. Sustituye los votos que hubiera: úsalo solo para ensayar, nunca con el concurso en marcha.
             </p>
           </div>
           <button className="btn btn-primary" onClick={onSimulateVotes}>
@@ -837,19 +877,20 @@ export function AdminPanel({
       {/* Teams Management */}
       <div className="card">
         <div className="flex items-center justify-between" style={{ marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <h3>Equipos de este Concurso ({totalTeams} tapas · {totalMembers} personas)</h3>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              Hasta 3 personas por tapa. Cada persona tiene su PIN y su voto; la ficha del plato es compartida.
+              Hasta 3 personas por tapa. Cada persona entra con su PIN y vota desde su móvil; la ficha del plato es compartida.{' '}
+              {voteMode === 'team' ? 'Los votos de cada equipo se funden en uno solo.' : 'Cada voto cuenta por separado.'}
             </span>
           </div>
 
           {/* Add team form */}
-          <form onSubmit={handleAddTeam} style={{ display: 'flex', gap: '8px' }}>
+          <form onSubmit={handleAddTeam} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: '1 1 260px', minWidth: 0 }}>
             <input
               type="text"
               className="input"
-              style={{ padding: '6px 12px', fontSize: '13px', width: '260px' }}
+              style={{ padding: '6px 12px', fontSize: '13px', width: 'auto', flex: '1 1 180px', minWidth: 0 }}
               placeholder="Ana, Luis, Marta (máx. 3, separados por comas)"
               value={newTeamNames}
               onChange={(e) => setNewTeamNames(e.target.value)}

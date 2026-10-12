@@ -21,7 +21,7 @@ export function formatTastingScheduleForWhatsApp(
     message += `*#${index + 1}* Equipo: *${teamLabel(team, members)}*${timeStr}\n`;
   });
 
-  message += `\nEntrad a vuestro portal con vuestro PIN personal para preparar la ficha secreta de vuestro plato.`;
+  message += `\nEntrad con vuestro enlace personal para preparar la ficha secreta de vuestra tapa. El día del concurso votaréis desde ahí.`;
   message += `\n✨ _¡A los fogones y buena suerte!_ ✨`;
   return message;
 }
@@ -43,7 +43,7 @@ export function formatVotingReminder(
   pendingNames.forEach((name) => {
     message += `• ${name}\n`;
   });
-  message += `\nEntrad a vuestro portal con vuestro PIN y repartid vuestros puntos:`;
+  message += `\nEntrad con vuestro enlace u ordenad las tapas con vuestro PIN. La votación se cierra al empezar la gala:`;
   message += `\n${accessUrl}`;
   return message;
 }

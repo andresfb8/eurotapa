@@ -32,7 +32,7 @@ export function Navigation({
         style={{
           backgroundColor: 'var(--color-surface)',
           borderBottom: '1px solid var(--border-color)',
-          padding: '10px var(--space-6)',
+          padding: '10px 0',
           position: 'sticky',
           top: 0,
           zIndex: 100
@@ -138,9 +138,9 @@ export function Navigation({
                 padding: '4px 8px',
                 fontWeight: 600
               }}
-              title="Consultar la normativa y reglas del concurso"
+              title="Normativa del concurso y guía rápida para organizar"
             >
-              ? Reglas
+              ? Ayuda
             </button>
 
             <button
@@ -157,7 +157,9 @@ export function Navigation({
       </header>
 
       {/* Rules Modal */}
-      {isRulesOpen && <RulesModal onClose={() => setIsRulesOpen(false)} />}
+      {isRulesOpen && (
+        <RulesModal audience={role === 'superadmin' ? 'organizer' : 'participant'} onClose={() => setIsRulesOpen(false)} />
+      )}
     </>
   );
 }

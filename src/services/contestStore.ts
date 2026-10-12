@@ -12,12 +12,13 @@ import {
   UserRole,
   MultiContestData,
   RemoteContestSummary,
-  TvTheme
+  TvTheme,
+  VoteModeSetting
 } from '../types/contest';
 import { INITIAL_CONTEST_STATE } from './mockData';
 import { MASTER_PIN, generateUniquePin } from '../utils/pins';
 import { normalizeContest } from '../utils/contestMigration';
-import { buildJuryVotes } from '../utils/juries';
+import { buildJuryVotes, effectiveVoteMode } from '../utils/juries';
 
 /**
  * Sandbox (`npm run dev:sandbox`): the demo contest lives only in this browser and nothing is read
@@ -673,6 +674,13 @@ export function useContest() {
     [updateCurrentContest]
   );
 
+  const setVoteMode = useCallback(
+    (voteMode: VoteModeSetting) => {
+      updateCurrentContest((prev) => ({ ...prev, voteMode }));
+    },
+    [updateCurrentContest]
+  );
+
   const setTvTheme = useCallback(
     (tvTheme: TvTheme) => {
       updateCurrentContest((prev) => ({ ...prev, tvTheme }));
@@ -695,7 +703,12 @@ export function useContest() {
   const nextGalaStep = useCallback(() => {
     updateCurrentContest((prev) => {
       // One jury per tapa: the combined vote of the members of each team
-      const votersList = buildJuryVotes(prev.teams, prev.members, prev.votes);
+      const votersList = buildJuryVotes(
+        prev.teams,
+        prev.members,
+        prev.votes,
+        effectiveVoteMode(prev.teams, prev.members, prev.voteMode)
+      );
       if (votersList.length === 0) return prev;
 
       const currentIdx = prev.gala.currentVoterIndex;
@@ -791,7 +804,12 @@ export function useContest() {
    */
   const undoGalaStep = useCallback(() => {
     updateCurrentContest((prev) => {
-      const votersList = buildJuryVotes(prev.teams, prev.members, prev.votes);
+      const votersList = buildJuryVotes(
+        prev.teams,
+        prev.members,
+        prev.votes,
+        effectiveVoteMode(prev.teams, prev.members, prev.voteMode)
+      );
       const history = prev.gala.history ?? [];
 
       if (history.length > 0) {
@@ -1372,6 +1390,7 @@ export function useContest() {
     undoGalaStep,
     setGalaMode,
     setTvTheme,
+    setVoteMode,
     generateTastingSchedule,
     clearTastingSchedule,
     simulateSampleVotes,

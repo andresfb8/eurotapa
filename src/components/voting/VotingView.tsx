@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { GalaState, Member, Team, VoteRecord, ContestPhase } from '../../types/contest';
+import { GalaState, Member, Team, VoteMode, VoteRecord, ContestPhase } from '../../types/contest';
 import { membersOfTeam, teamLabel } from '../../utils/teams';
 import { formatDrawDate } from '../../utils/dates';
 import { TapaEditModal } from './TapaEditModal';
@@ -22,6 +22,7 @@ interface VotingViewProps {
   drawDoneAt?: string;
   title: string;
   gala: GalaState;
+  voteMode: VoteMode;
   /** Team whose tapa is on the TV during the tasting. */
   activeTastingId?: string;
   tastingServedUpTo?: number;
@@ -39,6 +40,7 @@ export function VotingView({
   drawDoneAt,
   title,
   gala,
+  voteMode,
   activeTastingId,
   tastingServedUpTo,
   onSubmitVote,
@@ -212,7 +214,7 @@ export function VotingView({
             <span className="badge badge-neutral">Portal del Chef</span>
             <h1 style={{ marginTop: '8px', fontSize: '2rem' }}>Acceso a tu Tapa Secreta</h1>
             <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>
-              Introduce tu código personal de 4 dígitos para editar los detalles de tu plato y participar en las votaciones.
+              Introduce tu PIN personal de 4 dígitos para preparar la ficha de tu tapa, seguir la cata y votar.
             </p>
           </div>
 
@@ -269,7 +271,7 @@ export function VotingView({
               onClick={() => setIsRulesModalOpen(true)}
               style={{ width: '100%', marginTop: '4px' }}
             >
-              Consultar Normativa y Sistema de Puntos
+              Cómo funciona y cómo se vota
             </button>
           </form>
         </div>
@@ -451,7 +453,9 @@ export function VotingView({
           votes={votes}
           gala={gala}
           phase={phase}
+          voteMode={voteMode}
           currentTeam={currentTeam}
+          currentMemberId={currentMember.id}
         />
       )}
 
@@ -532,7 +536,7 @@ export function VotingView({
           <p style={{ color: 'var(--text-muted)', maxWidth: '420px', fontSize: '15px' }}>
             Tus puntos están guardados. Los resultados se revelan en directo en la pantalla grande cuando empiece la gala, y aquí verás cómo va tu tapa.
           </p>
-          {teamMembers.length > 1 && (
+          {teamMembers.length > 1 && voteMode === 'team' && (
             <p style={{ color: 'var(--text-muted)', maxWidth: '420px', fontSize: '14px' }}>
               Tu reparto se suma al del resto de tu equipo para formar un único voto de vuestra tapa.
             </p>

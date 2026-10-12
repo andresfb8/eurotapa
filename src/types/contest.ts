@@ -17,6 +17,12 @@ export type GalaStep = 'ESPERANDO' | 'REVELANDO_PUNTOS' | 'COMPLETO';
  */
 export type GalaMode = 'CLASICA' | 'DRAMATICA' | 'MAXIMA' | 'DIRECTA';
 
+/** Who is a jury in the gala: every person, or every team with one combined vote. */
+export type VoteMode = 'individual' | 'team';
+
+/** Organizer setting. `auto` picks individual when all teams have the same size, team otherwise. */
+export type VoteModeSetting = 'auto' | VoteMode;
+
 /** Look of the TV screens: light (cream, the default) or dark (charcoal studio). */
 export type TvTheme = 'light' | 'dark';
 
@@ -105,6 +111,7 @@ export interface ContestState {
   gala: GalaState;
   galaMode?: GalaMode; // Defaults to CLASICA when missing (legacy contests)
   tvTheme?: TvTheme; // Defaults to light when missing
+  voteMode?: VoteModeSetting; // Defaults to auto when missing
   createdAt?: string;
   updatedAt: string;
 }

@@ -50,3 +50,26 @@ todo sale de los tokens de `[data-theme="tv-light"]` y `[data-theme="tv"]`.
   para que la lista no crezca demasiado.
 - No se ha probado con más de 10 tapas (marcador a dos columnas) ni en un televisor real.
 - El panel de administración solo hereda los estilos base; no se ha rediseñado.
+
+## Tipo de voto: individual o combinado (añadido después)
+
+El voto combinado por equipo ya no es obligatorio. `ContestState.voteMode` admite `auto`
+(por defecto), `individual` y `team`, y `effectiveVoteMode()` (`src/utils/juries.ts`) lo resuelve:
+
+- **auto**: individual si todos los equipos tienen el mismo tamaño (todas las tapas reciben ya el
+  mismo número de votos); combinado si hay tamaños distintos.
+- **individual**: cada persona que ha votado es un jurado, con su voto tal cual.
+- **team**: un voto por tapa, fundiendo los de sus miembros (suma, reordenar, repartir N-1 … 1).
+
+`buildJuryVotes` y `calculateScoreboard` reciben el modo ya resuelto. `JuryVote.id` es el id de la
+persona o del equipo según el modo. El panel lo expone en "Configuración de la Gala" → "Tipo de
+voto", con aviso si se fuerza individual con equipos desiguales. Cambiarlo con la gala empezada
+descuadra el índice del jurado actual: hay que decidirlo antes.
+
+## Otros cambios posteriores al rediseño
+
+- El panel de organizador se adapta al móvil sin scroll horizontal (filas que se parten y márgenes
+  más estrechos por debajo de 640px).
+- `RulesModal` reescrito como "Cómo funciona EuroTapa": reglas, la noche del concurso en el móvil
+  y, para el organizador, una guía rápida. Textos de ayuda del acceso, el panel y los mensajes de
+  WhatsApp puestos al día.

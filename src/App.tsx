@@ -10,6 +10,7 @@ import { GalaTVView } from './components/gala/GalaTVView';
 import { AdminPanel } from './components/admin/AdminPanel';
 import { TVShell, TVStage } from './components/tv/TVShell';
 import { ContestPhase } from './types/contest';
+import { effectiveVoteMode } from './utils/juries';
 
 const PHASE_LABELS: Record<ContestPhase, string> = {
   CONFIGURACION: 'Preparación',
@@ -36,6 +37,7 @@ export function App() {
     undoGalaStep,
     setGalaMode,
     setTvTheme,
+    setVoteMode,
     generateTastingSchedule,
     clearTastingSchedule,
     simulateSampleVotes,
@@ -67,6 +69,9 @@ export function App() {
 
   // Tab for superadmin: 'admin' or 'tv' preview
   const [adminTab, setAdminTab] = useState<AdminViewTab>('admin');
+
+  // Individual juries when all teams have the same size, one combined vote per team otherwise
+  const voteMode = effectiveVoteMode(state.teams, state.members, state.voteMode);
 
   // TV View router based on contest state phase.
   // canControl is false for the public TV screen (no PIN needed to open it), so it can only display.
@@ -121,6 +126,7 @@ export function App() {
             gala={state.gala}
             phase={state.phase}
             galaMode={state.galaMode}
+            voteMode={voteMode}
             canControl={canControl}
             onNextGalaStep={nextGalaStep}
             onUndoGalaStep={undoGalaStep}
@@ -184,6 +190,7 @@ export function App() {
           drawDoneAt={state.drawDoneAt}
           title={state.title}
           gala={state.gala}
+          voteMode={voteMode}
           activeTastingId={state.activeTastingId}
           tastingServedUpTo={state.tastingServedUpTo}
           onSubmitVote={submitVote}
@@ -260,6 +267,7 @@ export function App() {
             onSetPhase={setPhase}
             onSetGalaMode={setGalaMode}
             onSetTvTheme={setTvTheme}
+            onSetVoteMode={setVoteMode}
             onGenerateSchedule={generateTastingSchedule}
             onClearSchedule={clearTastingSchedule}
             onReorder={reorderTasting}

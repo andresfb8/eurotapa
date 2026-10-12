@@ -272,3 +272,15 @@ h3 {
     display: none;
   }
 }
+
+/* Phones */
+@media (max-width: 640px) {
+  .card {
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
+  }
+
+  .container {
+    padding: 0 var(--space-3);
+  }
+}

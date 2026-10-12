@@ -1,10 +1,10 @@
-import { Member, Team, VoteRecord, ScoreboardItem, GalaState } from '../types/contest';
+import { Member, Team, VoteMode, VoteRecord, ScoreboardItem, GalaState } from '../types/contest';
 import { teamLabel } from './teams';
 import { buildJuryVotes } from './juries';
 
 /**
  * Calculates Eurovision standings with tie-breaking rules.
- * Points come from the jury vote of each team (the combined vote of its members), not from each person.
+ * Points come from the juries of the gala: every person, or one combined vote per team (see `mode`).
  * Tie-breaker: If totalPoints are equal, compare descending scores awarded (who got more 9s, 8s, etc.)
  * Tapas that are still level on every score share the same position (1º, 1º, 3º...).
  */
@@ -12,6 +12,7 @@ export function calculateScoreboard(
   teams: Team[],
   members: Member[],
   votes: Record<string, VoteRecord>,
+  mode: VoteMode,
   galaFilter?: { currentVoterIndex: number; galaState: GalaState }
 ): ScoreboardItem[] {
   // Map of scores received per team
@@ -23,7 +24,7 @@ export function calculateScoreboard(
     totalPointsMap[t.id] = 0;
   });
 
-  const juries = buildJuryVotes(teams, members, votes);
+  const juries = buildJuryVotes(teams, members, votes, mode);
 
   // Determine which votes are counted
   if (!galaFilter) {
