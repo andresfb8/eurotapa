@@ -88,25 +88,27 @@
 }
 
 /*
- * TV stage, cooking-show style: black studio, steel greys, and a flame that goes from amber to
+ * TV stage, cooking-show style: charcoal studio, steel greys, and a flame that goes from amber to
  * red. No purple anywhere. Photos and points are what carry the colour.
+ * The gala runs with the room lights half on, so the background is charcoal rather than black
+ * and secondary text is kept bright: a darker screen washes out and loses contrast.
  */
 [data-theme='tv'] {
-  --color-canvas: #0B0B0C;
-  --color-canvas-subtle: #141415;
-  --color-surface: #1B1B1D;
-  --color-surface-hover: #242427;
-  --color-surface-active: #2E2E32;
+  --color-canvas: #1C1C20;
+  --color-canvas-subtle: #25252A;
+  --color-surface: #2D2D33;
+  --color-surface-hover: #37373E;
+  --color-surface-active: #42424A;
 
-  --border-color: #2F2F33;
-  --border-color-strong: #4A4A50;
+  --border-color: #4A4A53;
+  --border-color-strong: #6A6A75;
   --border-subtle: rgba(255, 255, 255, 0.1);
 
   --text-primary: #FFFFFF;
   --text-body: #E9E7E4;
-  --text-muted: #A9A6A1;
-  --text-subtle: #7C7975;
-  --text-inverse: #0B0B0C;
+  --text-muted: #CBC8C3;
+  --text-subtle: #A19E99;
+  --text-inverse: #1C1C20;
 
   /* The flame: orange for points and highlights, red for "on air" and the hottest moments */
   --accent-saffron: #FF7A1A;

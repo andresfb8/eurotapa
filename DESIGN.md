@@ -29,7 +29,7 @@ Una cena entre amigos, no una revista: color, tipografía con carácter y botone
   * Acentos saturados: **tomate** `#E8472B` (acción principal), **azafrán** `#FFB81F` (puntos,
     líder, oro) y **oliva** `#5C8A3A` (confirmado).
   * Pasteles semánticos más vivos para avisos y estados.
-* **Tema TV** (`[data-theme="tv"]`), estilo plató de concurso de cocina: fondo negro, grises acero
+* **Tema TV** (`[data-theme="tv"]`), estilo plató de concurso de cocina: fondo gris carbón (no negro puro, para que aguante con la sala a media luz), grises acero
   y una "llama" que va del naranja `#FF7A1A` (puntos y destacados) al rojo `#E3261C` (directo y
   momentos calientes). Sin morados. El color lo ponen las fotos y las cifras.
 * **Tipografía**: titulares, nombres de plato y cifras grandes en `Bricolage Grotesque` (700–800);
