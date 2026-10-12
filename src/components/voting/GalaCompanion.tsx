@@ -228,7 +228,7 @@ export function GalaCompanion({ title, teams, members, votes, gala, phase, curre
 
       <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
         <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{mine.dishName || (isTeam ? 'Vuestra tapa' : 'Tu tapa')}</div>
-        <div className={styles.companionRank}>{mine.totalPoints > 0 ? `${mine.rank}º` : '—'}</div>
+        {mine.totalPoints > 0 && <div className={styles.companionRank}>{mine.rank}º</div>}
         <div style={{ fontSize: '15px' }}>
           <strong>{pts(mine.totalPoints)}</strong>
           {mine.totalPoints > 0 && above && above.totalPoints > mine.totalPoints && (

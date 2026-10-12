@@ -17,25 +17,32 @@
 
 ---
 
-## 2. Dirección de Diseño e Identidad Visual (`brandkit` + `minimalist-ui`)
+## 2. Dirección de Diseño e Identidad Visual ("fiesta")
 
-* **Paleta Cromática (Monocromo Cálido + Acentos Pastel Desaturados)**:
-  * Fondo de Lienzo (*Canvas*): Blanco hueso cálido `#F7F6F3` / `#FBFBFA`.
-  * Superficies y Tarjetas: Blanco puro `#FFFFFF` con borde estructural sutil `border: 1px solid #EAEAEA`.
-  * Tipografía Primaria: Off-black `#111111` (cuerpo en `#2F3437`, meta-datos en gris neutro `#787774`).
-  * Acentos Semánticos Pastel:
-    * *Pale Green* `#EDF3EC` (Texto `#346538`) para estados confirmados y líder temporal.
-    * *Pale Yellow* `#FBF3DB` (Texto `#956400`) para medallas y destacados de oro.
-    * *Pale Red* `#FDEBEC` (Texto `#9F2F2D`) para la tapa propia excluida de votación.
-    * *Pale Blue* `#E1F3FE` (Texto `#1F6C9F`) para turnos activos en cata.
-* **Tipografía Editorial**:
-  * Titulares de gala y nombres de platos: Tipografía serif con carácter (`Newsreader`, `Playfair Display` o `Instrument Serif`) con interletrado ajustado (`letter-spacing: -0.02em`).
-  * Interfaz de usuario, etiquetas y botones: Sans-serif limpia geométrica (`Geist Sans`, `SF Pro Display`, `Switzer`).
-  * Puntuaciones, códigos PIN y puestos: Monospaced limpia (`Geist Mono`, `SF Mono`).
-* **Restricciones Estéticas Absolutas**:
-  * Sin emojis en el código ni la interfaz; utilización exclusiva de iconos vectoriales SVG limpios.
-  * Sin degradados chillones, sombras excesivas ni efectos de cristal 3D estridentes.
-  * Bordes redondeados sobrios (`4px` a `8px`), con espaciado amplio y elegante.
+> Rama `rediseno-fiesta`. Sustituye a la dirección editorial minimalista anterior (fondo hueso,
+> serif fina y pasteles desaturados), que sigue en `master`.
+
+Una cena entre amigos, no una revista: color, tipografía con carácter y botones que apetece pulsar.
+
+* **Paleta** (`src/styles/tokens.css`):
+  * Lienzo crema cálido `#FFF4E3`, superficies blancas, tinta berenjena `#1E1A2B`.
+  * Acentos saturados: **tomate** `#E8472B` (acción principal), **azafrán** `#FFB81F` (puntos,
+    líder, oro) y **oliva** `#5C8A3A` (confirmado).
+  * Pasteles semánticos más vivos para avisos y estados.
+* **Tema TV** (`[data-theme="tv"]`): escenario oscuro berenjena con el azafrán como color de los
+  puntos, para que fotos y cifras destaquen desde el otro lado del salón.
+* **Tipografía**: titulares, nombres de plato y cifras grandes en `Bricolage Grotesque` (700–800);
+  cuerpo en `Geist`; etiquetas y contadores pequeños en `Geist Mono`.
+* **Forma**: radios de 10–22px, botones píldora con sombra dura desplazada ("pegatina"), bordes de
+  2px. Animaciones cortas con rebote; todo respeta `prefers-reduced-motion`.
+* **Móvil**: objetivos táctiles de 48px, acción principal fija abajo y al alcance del pulgar,
+  confirmaciones como hoja inferior, textos de 16px para que el teléfono no haga zoom.
+* **TV (monitor de 27")**: cada pantalla ocupa el 100% del monitor sin scroll. El escenario es un
+  contenedor de tamaño y todo se mide en `cqw` / `cqh`, así que se ve igual en 1920×1080 y en
+  2560×1440. Los controles del organizador van en una barra inferior que la TV pública no muestra.
+* **Restricciones**:
+  * Sin emojis en la interfaz; iconos SVG (`Icons.tsx`) y confeti en CSS (`Confetti.tsx`).
+  * Sin degradados chillones sobre el contenido: solo halos suaves de fondo.
 
 ---
 
@@ -56,7 +63,7 @@
 | :--- | :--- | :--- | :--- |
 | **DEC-01** | Arquitectura en tiempo real móvil $\leftrightarrow$ TV | Local/offline, WebSockets | Firebase garantiza sincronización instantánea (<50ms) sin coste ni mantenimiento de servidores. |
 | **DEC-02** | Regla estricta Eurovisión | Voto libre | Bloqueo de auto-voto en cliente y base de datos para garantizar imparcialidad total. |
-| **DEC-03** | Dirección estética (`brandkit` + `minimalist-ui`) | Interfaz genérica / colorida | Estilo editorial gastronómico: fondo hueso `#F7F6F3`, serif con carácter y microanimaciones FLIP. |
+| **DEC-03** | Dirección estética "fiesta": crema, tomate y azafrán, con TV oscura | Estilo editorial minimalista (el anterior) | Es una cena entre amigos: más color y carácter, votación cómoda con el pulgar y una TV que se lee de lejos. |
 | **DEC-04** | Estado de gala sincronizado en el documento | Coordinación local WebRTC | El admin muta `gala.votanteActualIndex` y la TV reacciona de forma determinista y sin desincronizaciones. |
 | **DEC-05** | Formato de votación con contador de puntos libres | Desplegable numérico sin guía | Evita duplicar puntuaciones y orienta al usuario en tiempo real sobre qué puntos le quedan por asignar. |
 | **DEC-06** | Exportación de texto para WhatsApp | Generar solo imagen | Un texto formateado es universal, se lee rápido en cualquier móvil y no depende de compresión de imagen. |

@@ -1,23 +1,29 @@
 .authContainer {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
-  align-items: center;
+  /* The card centres itself with auto margins, so a tall card on a short phone is never cut off at the top */
+  align-items: flex-start;
   justify-content: center;
-  padding: var(--space-6);
-  background: radial-gradient(circle at 50% 20%, #FFFDF9 0%, #F5F1EA 100%);
+  padding: var(--space-4);
+  background:
+    radial-gradient(60% 45% at 100% 0%, rgba(232, 71, 43, 0.22) 0%, transparent 70%),
+    radial-gradient(55% 45% at 0% 100%, rgba(255, 184, 31, 0.3) 0%, transparent 70%),
+    var(--color-canvas);
 }
 
 .authCard {
   width: 100%;
   max-width: 440px;
+  margin: auto;
   background-color: var(--color-surface);
-  border: 1px solid var(--border-color);
+  border: 2px solid var(--ink);
   border-radius: var(--radius-lg);
-  padding: 36px 32px;
-  box-shadow: 0 10px 30px rgba(44, 38, 30, 0.06);
+  padding: 32px 24px;
+  box-shadow: 0 6px 0 var(--ink);
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 22px;
 }
 
 .brandHeader {
@@ -25,50 +31,55 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .brandLogo {
-  width: 52px;
-  height: 52px;
-  border-radius: 12px;
-  background-color: var(--text-primary);
-  color: var(--text-inverse);
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  background-color: var(--accent-tomato);
+  border: 2px solid var(--ink);
+  box-shadow: var(--shadow-sticker);
+  color: #FFFFFF;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-weight: 800;
-  font-size: 20px;
-  letter-spacing: -0.05em;
-  box-shadow: 0 4px 12px rgba(28, 25, 23, 0.15);
+  font-size: 26px;
+  letter-spacing: -0.04em;
+  transform: rotate(-6deg);
 }
 
 .title {
-  font-family: var(--font-serif);
-  font-size: 2.2rem;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 2.6rem;
+  letter-spacing: -0.03em;
+  line-height: 1;
   color: var(--text-primary);
 }
 
 .subtitle {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--text-muted);
-  line-height: 1.5;
+  line-height: 1.4;
+  margin-top: 6px;
 }
 
 .contestPicker {
   background-color: var(--color-canvas);
-  border: 1px solid var(--border-subtle);
+  border: 2px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 10px 14px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .contestPickerLabel {
+  font-family: var(--font-mono);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -78,10 +89,11 @@
 
 .contestSelect {
   width: 100%;
+  min-height: 36px;
   background: transparent;
   border: none;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
   cursor: pointer;
@@ -95,7 +107,7 @@
 }
 
 .pinLabel {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
   display: flex;
@@ -103,30 +115,29 @@
 }
 
 .pinInput {
-  font-family: var(--font-mono);
-  font-size: 1.8rem;
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 2.4rem;
+  font-weight: 800;
   text-align: center;
   letter-spacing: 0.3em;
-  padding: 14px;
+  padding: 12px;
+  min-height: 72px;
   border-radius: var(--radius-md);
-  border: 1.5px solid var(--border-color);
-  background-color: var(--color-canvas);
+  border: 2px solid var(--border-color-strong);
+  background-color: var(--color-canvas-subtle);
   color: var(--text-primary);
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .pinInput:focus {
-  border-color: var(--text-primary);
-  background-color: #fff;
-  box-shadow: 0 0 0 3px rgba(28, 25, 23, 0.08);
+  border-color: var(--ink);
+  background-color: #FFFFFF;
   outline: none;
 }
 
 .pinInput::placeholder {
-  letter-spacing: 0.1em;
-  color: #CCC6BE;
-  font-size: 1.4rem;
+  letter-spacing: 0.15em;
+  color: var(--border-color-strong);
 }
 
 .actions {
@@ -137,19 +148,19 @@
 
 .submitBtn {
   width: 100%;
-  padding: 14px;
-  font-size: 15px;
-  font-weight: 600;
-  border-radius: var(--radius-md);
+  min-height: 56px;
+  font-size: 17px;
+  font-weight: 700;
 }
 
 .divider {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 6px 0;
+  margin: 4px 0;
   color: var(--text-subtle);
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -158,8 +169,8 @@
 .divider::after {
   content: '';
   flex: 1;
-  height: 1px;
-  background-color: var(--border-subtle);
+  height: 2px;
+  background-color: var(--border-color);
 }
 
 .secondaryOptions {
@@ -169,32 +180,21 @@
 
 .tvBtn {
   flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 10px;
-  font-size: 13px;
-  font-weight: 500;
+  min-height: var(--tap);
 }
 
 .rulesBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 10px 14px;
-  font-size: 13px;
+  min-height: var(--tap);
 }
 
 .demoHints {
   background-color: var(--color-canvas);
   border-radius: var(--radius-sm);
   padding: 12px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-muted);
   line-height: 1.4;
-  border-left: 3px solid var(--accent-burgundy);
+  border-left: 4px solid var(--accent-saffron);
 }
 
 .demoHints strong {
