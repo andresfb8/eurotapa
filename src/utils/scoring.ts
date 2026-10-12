@@ -1,15 +1,18 @@
 import { Member, Team, VoteRecord, ScoreboardItem, GalaState } from '../types/contest';
 import { teamLabel } from './teams';
+import { buildJuryVotes } from './juries';
 
 /**
  * Calculates Eurovision standings with tie-breaking rules.
+ * Points come from the jury vote of each team (the combined vote of its members), not from each person.
  * Tie-breaker: If totalPoints are equal, compare descending scores awarded (who got more 9s, 8s, etc.)
+ * Tapas that are still level on every score share the same position (1º, 1º, 3º...).
  */
 export function calculateScoreboard(
   teams: Team[],
   members: Member[],
   votes: Record<string, VoteRecord>,
-  galaFilter?: { currentVoterIndex: number; activeVotersList: Member[]; galaState: GalaState }
+  galaFilter?: { currentVoterIndex: number; galaState: GalaState }
 ): ScoreboardItem[] {
   // Map of scores received per team
   const receivedScoresMap: Record<string, number[]> = {};
@@ -20,10 +23,12 @@ export function calculateScoreboard(
     totalPointsMap[t.id] = 0;
   });
 
+  const juries = buildJuryVotes(teams, members, votes);
+
   // Determine which votes are counted
   if (!galaFilter) {
-    // Normal full count: include all registered votes
-    Object.values(votes).forEach((vote) => {
+    // Normal full count: include every jury vote
+    juries.forEach((vote) => {
       Object.entries(vote.scores).forEach(([targetId, points]) => {
         if (totalPointsMap[targetId] !== undefined) {
           totalPointsMap[targetId] += points;
@@ -33,13 +38,11 @@ export function calculateScoreboard(
     });
   } else {
     // Live Gala reveal count:
-    const { currentVoterIndex, activeVotersList, galaState } = galaFilter;
+    const { currentVoterIndex, galaState } = galaFilter;
 
-    // 1. All voters prior to currentVoterIndex have their full points counted
+    // 1. All juries prior to currentVoterIndex have their full points counted
     for (let i = 0; i < currentVoterIndex; i++) {
-      const pastVoter = activeVotersList[i];
-      if (!pastVoter) continue;
-      const vote = votes[pastVoter.id];
+      const vote = juries[i];
       if (vote) {
         Object.entries(vote.scores).forEach(([targetId, points]) => {
           if (totalPointsMap[targetId] !== undefined) {
@@ -50,20 +53,17 @@ export function calculateScoreboard(
       }
     }
 
-    // 2. Current voter only counts points that have been revealed so far
-    const currentVoter = activeVotersList[currentVoterIndex];
-    if (currentVoter) {
-      const vote = votes[currentVoter.id];
-      if (vote) {
-        Object.entries(vote.scores).forEach(([targetId, points]) => {
-          if (galaState.revealedTapaIds.includes(targetId)) {
-            if (totalPointsMap[targetId] !== undefined) {
-              totalPointsMap[targetId] += points;
-              receivedScoresMap[targetId].push(points);
-            }
+    // 2. Current jury only counts points that have been revealed so far
+    const vote = juries[currentVoterIndex];
+    if (vote) {
+      Object.entries(vote.scores).forEach(([targetId, points]) => {
+        if (galaState.revealedTapaIds.includes(targetId)) {
+          if (totalPointsMap[targetId] !== undefined) {
+            totalPointsMap[targetId] += points;
+            receivedScoresMap[targetId].push(points);
           }
-        });
-      }
+        }
+      });
     }
   }
 
@@ -98,13 +98,22 @@ export function calculateScoreboard(
       }
     }
 
-    // 3. Fallback: alphabetical
+    // 3. Full tie: they share the position, alphabetical only decides who is listed first
     return a.dishName.localeCompare(b.dishName);
   });
 
-  // Assign 1-indexed ranks
-  return items.map((item, index) => ({
-    ...item,
-    rank: index + 1
-  }));
+  // Assign 1-indexed ranks. Fully tied tapas share the position; tapas without points yet are
+  // simply listed in order, so the board does not open with everybody in first place.
+  const ranked: ScoreboardItem[] = [];
+  items.forEach((item, index) => {
+    const previous = ranked[index - 1];
+    const sharesPosition =
+      !!previous &&
+      item.totalPoints > 0 &&
+      item.totalPoints === previous.totalPoints &&
+      item.highestPointsBreakdown.length === previous.highestPointsBreakdown.length &&
+      item.highestPointsBreakdown.every((pts, i) => pts === previous.highestPointsBreakdown[i]);
+    ranked.push({ ...item, rank: sharesPosition ? previous.rank : index + 1 });
+  });
+  return ranked;
 }

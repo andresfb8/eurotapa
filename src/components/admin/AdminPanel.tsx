@@ -5,6 +5,11 @@ import { buildParticipantLink, buildTvLink, getPublicAppBaseUrl, isLocalOrigin }
 import { membersOfTeam, teamLabel } from '../../utils/teams';
 import { formatVotingReminder } from '../../utils/whatsappExport';
 import { isValidPin } from '../../utils/pins';
+import { formatDrawDate } from '../../utils/dates';
+import { runAnimatedDraw } from '../../utils/draw';
+import { formatTastingScheduleForWhatsApp } from '../../utils/whatsappExport';
+import { ConfirmDialog } from '../ConfirmDialog';
+import { AlertIcon, CheckIcon, ClipboardIcon, ClockIcon, LockIcon, PlusIcon, TrashIcon } from '../Icons';
 import styles from './AdminPanel.module.css';
 
 interface AdminPanelProps {
@@ -26,6 +31,9 @@ interface AdminPanelProps {
   onSetPhase: (phase: ContestState['phase']) => void;
   onSetGalaMode: (mode: GalaMode) => void;
   onGenerateSchedule: (startTime: string, minutesPerTeam: number) => void;
+  onClearSchedule: () => void;
+  onReorder: (orderedIds: string[]) => void;
+  onConfirmDraw: () => void;
   onSimulateVotes: () => void;
   onReset: () => void;
   onOpenTV?: () => void;
@@ -34,7 +42,7 @@ interface AdminPanelProps {
 
 const PHASES: { key: ContestState['phase']; label: string }[] = [
   { key: 'CONFIGURACION', label: '1. Configuración' },
-  { key: 'SORTEO', label: '2. Sorteo' },
+  { key: 'SORTEO', label: '2. Sorteo y Preparación' },
   { key: 'DEGUSTACION', label: '3. Degustación' },
   { key: 'VOTACION', label: '4. Votación Móvil' },
   { key: 'GALA_TV', label: '5. Gala en Vivo' },
@@ -154,7 +162,8 @@ function MemberRow({
           onClick={() => onCopyLink(member)}
           title="Copiar enlace directo de acceso para enviar por WhatsApp"
         >
-          {isCopied ? '✓ Copiado' : '📋 Enlace'}
+          {isCopied ? <CheckIcon /> : <ClipboardIcon />}
+          {isCopied ? 'Copiado' : 'Enlace'}
         </button>
 
         <button
@@ -197,6 +206,9 @@ export function AdminPanel({
   onSetPhase,
   onSetGalaMode,
   onGenerateSchedule,
+  onClearSchedule,
+  onReorder,
+  onConfirmDraw,
   onSimulateVotes,
   onReset,
   onOpenTV,
@@ -210,6 +222,9 @@ export function AdminPanel({
   const [isReminderCopied, setIsReminderCopied] = useState(false);
   const [scheduleStart, setScheduleStart] = useState('14:00');
   const [scheduleMinutes, setScheduleMinutes] = useState('15');
+  const [isShuffling, setIsShuffling] = useState(false);
+  const [isRedrawConfirmOpen, setIsRedrawConfirmOpen] = useState(false);
+  const [isOrderCopied, setIsOrderCopied] = useState(false);
 
   const totalTeams = state.teams.length;
   const totalMembers = state.members.length;
@@ -224,6 +239,7 @@ export function AdminPanel({
 
   const sortedTeams = [...state.teams].sort((a, b) => a.tastingOrder - b.tastingOrder);
   const pendingMembers = state.members.filter((m) => !state.votes[m.id]);
+  const hasSchedule = state.teams.some((t) => !!t.tastingTime);
   const galaMode: GalaMode = state.galaMode ?? 'CLASICA';
 
   const handleAddTeam = (e: React.FormEvent) => {
@@ -296,6 +312,37 @@ export function AdminPanel({
     }
   };
 
+  const handleDraw = () => {
+    setIsRedrawConfirmOpen(false);
+    setIsShuffling(true);
+    runAnimatedDraw(
+      state.teams.map((t) => t.id),
+      onReorder,
+      () => {
+        setIsShuffling(false);
+        onConfirmDraw();
+      }
+    );
+  };
+
+  const handleMoveTurn = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= sortedTeams.length) return;
+    const ids = sortedTeams.map((t) => t.id);
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    onReorder(ids);
+  };
+
+  const handleCopyOrder = () => {
+    const text = formatTastingScheduleForWhatsApp(state.title, sortedTeams, state.members);
+    navigator.clipboard.writeText(text).then(() => {
+      setIsOrderCopied(true);
+      setTimeout(() => setIsOrderCopied(false), 2500);
+    }).catch(() => {
+      prompt('Copia el orden de salida para el grupo:', text);
+    });
+  };
+
   const handleGenerateSchedule = () => {
     const minutes = parseInt(scheduleMinutes, 10);
     if (isNaN(minutes) || minutes <= 0 || minutes > 240) {
@@ -350,7 +397,8 @@ export function AdminPanel({
               onClick={handleCopyTvLink}
               title="Copiar enlace para abrir la pantalla de TV en otro dispositivo"
             >
-              {isTvLinkCopied ? '✓ Enlace TV Copiado' : 'Enlace TV'}
+              {isTvLinkCopied && <CheckIcon />}
+              {isTvLinkCopied ? 'Enlace TV Copiado' : 'Enlace TV'}
             </button>
 
             <button
@@ -358,7 +406,8 @@ export function AdminPanel({
               className="btn btn-primary btn-sm"
               onClick={() => setIsCreateModalOpen(true)}
             >
-              ➕ Nuevo Concurso
+              <PlusIcon />
+              Nuevo Concurso
             </button>
 
             {onLogout && (
@@ -416,7 +465,8 @@ export function AdminPanel({
                   }
                 }}
               >
-                🗑️ Eliminar Concurso
+                <TrashIcon />
+                Eliminar Concurso
               </button>
             )}
 
@@ -439,7 +489,7 @@ export function AdminPanel({
       {isLocal && (
         <div className="card" style={{ backgroundColor: 'var(--pastel-yellow-bg)', borderColor: '#EBD9A6' }}>
           <div className="flex items-center gap-3">
-            <span style={{ fontSize: '18px' }}>⚠️</span>
+            <AlertIcon style={{ width: '20px', height: '20px', color: 'var(--pastel-yellow-text)', flexShrink: 0 }} />
             <div>
               <strong style={{ fontSize: '14px', color: 'var(--pastel-yellow-text)' }}>
                 Estás en un servidor local
@@ -527,10 +577,91 @@ export function AdminPanel({
 
       {/* Sorteo & Schedule */}
       <div className="card">
-        <h3 style={{ marginBottom: '4px' }}>Sorteo y Horario de Turnos</h3>
+        <div className="flex items-center justify-between" style={{ marginBottom: '4px', flexWrap: 'wrap', gap: '8px' }}>
+          <h3>Sorteo y Horario de Turnos</h3>
+          {state.drawDoneAt ? (
+            <span className="badge badge-green">Orden oficial · sorteado el {formatDrawDate(state.drawDoneAt)}</span>
+          ) : (
+            <span className="badge badge-yellow">Sorteo pendiente</span>
+          )}
+        </div>
         <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '14px' }}>
-          El sorteo se realiza en la pantalla de TV (aleatorio, con reordenación manual). Aquí puedes generar las horas
-          de cada turno para que salgan en el mensaje de WhatsApp.
+          Haz el sorteo cuando quieras, con antelación, para que los equipos conozcan su turno y preparen su tapa.
+          Puedes sortear al azar o colocar los equipos a mano y fijar ese orden; después las flechas siguen sirviendo
+          para cualquier imprevisto. Si quieres hacerlo en directo delante de todos, usa la pestaña "Ver TV".
+        </p>
+
+        <div className="flex items-center gap-2" style={{ flexWrap: 'wrap', marginBottom: '12px' }}>
+          {state.drawDoneAt ? (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => setIsRedrawConfirmOpen(true)}
+              disabled={isShuffling}
+            >
+              {isShuffling ? 'Sorteando...' : 'Repetir sorteo'}
+            </button>
+          ) : (
+            <>
+              <button type="button" className="btn btn-primary btn-sm" onClick={handleDraw} disabled={isShuffling}>
+                {isShuffling ? 'Sorteando...' : 'Realizar sorteo aleatorio'}
+              </button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={onConfirmDraw} disabled={isShuffling}>
+                Fijar este orden sin sortear
+              </button>
+            </>
+          )}
+          <button type="button" className="btn btn-secondary btn-sm" onClick={handleCopyOrder}>
+            {isOrderCopied ? <CheckIcon /> : <ClipboardIcon />}
+            {isOrderCopied ? 'Orden copiado' : 'Copiar orden para WhatsApp'}
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '16px' }}>
+          {sortedTeams.map((team, index) => (
+            <div
+              key={team.id}
+              className="flex items-center justify-between"
+              style={{ gap: '10px', padding: '6px 10px', border: '1px solid var(--border-subtle)', borderRadius: '4px', fontSize: '13px' }}
+            >
+              <span style={{ minWidth: 0 }}>
+                <span className="mono" style={{ fontWeight: 700, marginRight: '8px' }}>#{index + 1}</span>
+                {teamLabel(team, state.members)}
+                {team.tastingTime && (
+                  <span className="mono" style={{ color: 'var(--text-muted)', marginLeft: '8px' }}>{team.tastingTime} h</span>
+                )}
+              </span>
+              <span className="flex items-center gap-1" style={{ flexShrink: 0 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '2px 8px' }}
+                  onClick={() => handleMoveTurn(index, -1)}
+                  disabled={index === 0 || isShuffling}
+                  title="Adelantar turno"
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '2px 8px' }}
+                  onClick={() => handleMoveTurn(index, 1)}
+                  disabled={index === sortedTeams.length - 1 || isShuffling}
+                  title="Retrasar turno"
+                >
+                  ▼
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '2px' }}>Horas de cada turno (opcional)</div>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '10px' }}>
+          {hasSchedule
+            ? 'Las horas salen junto al turno en la TV, los móviles y el mensaje de WhatsApp.'
+            : 'Ahora mismo solo se muestra el orden de salida, sin horas.'}
         </p>
 
         <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
@@ -553,24 +684,35 @@ export function AdminPanel({
             style={{ width: '64px', padding: '6px 8px', fontSize: '13px' }}
           />
           <button type="button" className="btn btn-secondary btn-sm" onClick={handleGenerateSchedule}>
-            Generar horarios
+            {hasSchedule ? 'Recalcular horas' : 'Poner horas'}
           </button>
+          {hasSchedule && (
+            <button type="button" className="btn btn-secondary btn-sm" onClick={onClearSchedule}>
+              Quitar horas
+            </button>
+          )}
         </div>
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '14px' }}>
-          {sortedTeams.map((team, index) => (
-            <span key={team.id} className="badge badge-neutral" style={{ textTransform: 'none', fontSize: '11px' }}>
-              #{index + 1} {teamLabel(team, state.members)}
-              {team.tastingTime ? ` · ${team.tastingTime}` : ' · sin hora'}
-            </span>
-          ))}
-        </div>
+        {isRedrawConfirmOpen && (
+          <ConfirmDialog
+            title="¿Repetir el sorteo?"
+            confirmLabel="Sí, sortear de nuevo"
+            cancelLabel="Mantener el orden actual"
+            onConfirm={handleDraw}
+            onCancel={() => setIsRedrawConfirmOpen(false)}
+          >
+            <p>
+              Los equipos ya conocen su turno y pueden estar preparando su tapa contando con él. Un sorteo nuevo
+              cambia todos los turnos a la vez; para un imprevisto concreto es mejor mover solo los equipos afectados.
+            </p>
+          </ConfirmDialog>
+        )}
       </div>
 
       {/* Privacy Notice Banner */}
       <div className="card" style={{ backgroundColor: 'var(--color-canvas)', borderColor: 'var(--border-color)' }}>
         <div className="flex items-center gap-3">
-          <span style={{ fontSize: '18px' }}>🔒</span>
+          <LockIcon style={{ width: '20px', height: '20px', flexShrink: 0 }} />
           <div>
             <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
               Privacidad y Secreto de Tapas Garantizado
@@ -586,7 +728,7 @@ export function AdminPanel({
       <div className="card" style={{ backgroundColor: 'var(--pastel-blue-bg)', borderColor: '#BEDDF3' }}>
         <div className="flex items-center justify-between" style={{ flexWrap: 'wrap', gap: '12px' }}>
           <div>
-            <h3 style={{ color: 'var(--pastel-blue-text)' }}>⚡ Simulación Inmediata para Pruebas</h3>
+            <h3 style={{ color: 'var(--pastel-blue-text)' }}>Simulación Inmediata para Pruebas</h3>
             <p style={{ fontSize: '13px', color: '#1A4D6E', marginTop: '2px' }}>
               Genera votos de prueba para todos los participantes con 1 clic y pasa directo a la Gala de Eurovisión en TV.
             </p>
@@ -618,7 +760,8 @@ export function AdminPanel({
               onChange={(e) => setNewTeamNames(e.target.value)}
             />
             <button type="submit" className="btn btn-primary btn-sm">
-              ➕ Añadir Equipo
+              <PlusIcon />
+              Añadir Equipo
             </button>
           </form>
         </div>
@@ -626,12 +769,14 @@ export function AdminPanel({
         {/* Bulk actions */}
         <div className="flex items-center gap-2" style={{ flexWrap: 'wrap', marginBottom: '14px', paddingBottom: '12px', borderBottom: '1px solid var(--border-subtle)' }}>
           <button type="button" className="btn btn-secondary btn-sm" onClick={handleCopyAllLinks}>
-            {isAllLinksCopied ? '✓ Enlaces Copiados' : '📋 Copiar todos los enlaces'}
+            {isAllLinksCopied ? <CheckIcon /> : <ClipboardIcon />}
+            {isAllLinksCopied ? 'Enlaces Copiados' : 'Copiar todos los enlaces'}
           </button>
           <button type="button" className="btn btn-secondary btn-sm" onClick={handleCopyReminder}>
+            {isReminderCopied ? <CheckIcon /> : <ClockIcon />}
             {isReminderCopied
-              ? '✓ Recordatorio Copiado'
-              : `⏳ Recordar votación (${pendingMembers.length} pendientes)`}
+              ? 'Recordatorio Copiado'
+              : `Recordar votación (${pendingMembers.length} pendientes)`}
           </button>
         </div>
 
@@ -655,7 +800,8 @@ export function AdminPanel({
                   <div className="flex items-center gap-1">
                     {isComplete ? (
                       <span className="badge badge-green" title="Nombre, ingredientes y fotografía listos">
-                        ✓ Ficha Lista
+                        <CheckIcon />
+                        Ficha Lista
                       </span>
                     ) : !hasPhoto ? (
                       <span className="badge badge-yellow" title="Falta subir la fotografía de la tapa">

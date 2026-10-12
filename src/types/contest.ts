@@ -86,6 +86,11 @@ export interface ContestState {
   teams: Team[];
   members: Member[];
   votes: Record<string, VoteRecord>; // memberId -> VoteRecord
+  /**
+   * When the official serving order was fixed (ISO date). The draw happens well before the
+   * contest day so teams can plan and rehearse; missing means the draw is still pending.
+   */
+  drawDoneAt?: string;
   activeTastingId?: string; // Team id shown in degustación mode
   gala: GalaState;
   galaMode?: GalaMode; // Defaults to CLASICA when missing (legacy contests)

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ContestPhase, UserRole } from '../types/contest';
 import { RulesModal } from './RulesModal';
+import { SettingsIcon, TvIcon } from './Icons';
 
 export type AdminViewTab = 'admin' | 'tv';
 
@@ -100,7 +101,8 @@ export function Navigation({
                 }}
                 onClick={() => onAdminTabChange('admin')}
               >
-                ⚙️ Mando Admin
+                <SettingsIcon />
+                Mando Admin
               </button>
 
               <button
@@ -113,7 +115,8 @@ export function Navigation({
                 }}
                 onClick={() => onAdminTabChange('tv')}
               >
-                📺 Ver TV
+                <TvIcon />
+                Ver TV
               </button>
             </div>
           )}

@@ -6,6 +6,8 @@ interface TastingViewProps {
   teams: Team[];
   members: Member[];
   activeId?: string;
+  /** False on the public TV screen, so nobody can browse ahead to tapas that have not been served yet. */
+  canControl: boolean;
   onSelectActive: (id: string) => void;
   onProceedToVoting: () => void;
 }
@@ -14,6 +16,7 @@ export function TastingView({
   teams,
   members,
   activeId,
+  canControl,
   onSelectActive,
   onProceedToVoting
 }: TastingViewProps) {
@@ -47,12 +50,14 @@ export function TastingView({
           </span>
         </div>
 
-        <button className="btn btn-primary btn-sm" onClick={onProceedToVoting}>
-          Abrir Votación
-          <svg className="icon" viewBox="0 0 24 24">
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-        </button>
+        {canControl && (
+          <button className="btn btn-primary btn-sm" onClick={onProceedToVoting}>
+            Abrir Votación
+            <svg className="icon" viewBox="0 0 24 24">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+        )}
       </div>
 
       <div className={styles.tastingCard}>
@@ -98,6 +103,7 @@ export function TastingView({
             )}
           </div>
 
+          {canControl && (
           <div className={styles.footerControls}>
             <button
               className="btn btn-secondary"
@@ -125,6 +131,7 @@ export function TastingView({
               </svg>
             </button>
           </div>
+          )}
         </div>
       </div>
     </div>

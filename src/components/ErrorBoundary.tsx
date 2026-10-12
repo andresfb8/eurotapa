@@ -30,6 +30,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   private handleResetSession = () => {
     try {
       window.localStorage.removeItem('eurotapa_session_v2');
+      window.localStorage.removeItem('eurotapa_sandbox_session_v2');
     } catch {
       // ignore
     }

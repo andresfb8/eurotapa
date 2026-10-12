@@ -73,7 +73,8 @@ export function RulesModal({ onClose }: RulesModalProps) {
             <p style={{ color: 'var(--text-body)' }}>
               Si compiten 8 tapas, cada jurado repartirá <strong>7 puntos</strong> a su tapa preferida, <strong>6 puntos</strong> a la
               segunda, y así sucesivamente hasta <strong>1 punto</strong>. No se pueden repetir puntos ni dejar huecos sin calificar.
-              Cada miembro de un equipo emite su propio voto.
+              Cada persona vota desde su móvil; si la tapa la cocina un equipo, los votos de sus miembros se suman y se
+              funden en <strong>un único reparto por tapa</strong>, de modo que todas las tapas reciben el mismo número de votos.
             </p>
           </div>
 
@@ -84,7 +85,7 @@ export function RulesModal({ onClose }: RulesModalProps) {
               Sorteo y Turnos de Salida
             </div>
             <p style={{ color: 'var(--text-body)' }}>
-              El orden en el que se sirven las tapas se define en el sorteo previo en la TV. Respeta tu turno para que cada plato salga recién cocinado y a la temperatura óptima.
+              El orden en el que se sirven las tapas se sortea con antelación, para que cada equipo conozca su turno y pueda preparar y ensayar su plato. Respeta tu turno para que cada plato salga recién cocinado y a la temperatura óptima.
             </p>
           </div>
 
@@ -106,7 +107,7 @@ export function RulesModal({ onClose }: RulesModalProps) {
               Criterio Oficial de Desempate
             </div>
             <p style={{ color: 'var(--text-body)' }}>
-              En caso de empate a puntos totales en la clasificación, vencerá la tapa que haya obtenido más puntuaciones máximas (más 9s, más 8s, etc.).
+              En caso de empate a puntos totales en la clasificación, vencerá la tapa que haya obtenido más puntuaciones máximas; si siguen igualadas, la que tenga más segundas máximas, y así sucesivamente. Si empatan en todas, comparten puesto.
             </p>
           </div>
         </div>

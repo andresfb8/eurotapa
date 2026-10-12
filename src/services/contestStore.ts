@@ -16,11 +16,19 @@ import {
 import { INITIAL_CONTEST_STATE } from './mockData';
 import { MASTER_PIN, generateUniquePin } from '../utils/pins';
 import { normalizeContest } from '../utils/contestMigration';
+import { buildJuryVotes } from '../utils/juries';
 
-const MULTI_STORAGE_KEY = 'eurotapa_multicontest_v2';
-const LEGACY_STORAGE_KEY = 'eurotapa_state_v1';
-const SESSION_STORAGE_KEY = 'eurotapa_session_v2';
-const SYNC_CHANNEL = 'eurotapa_live_sync_v2';
+/**
+ * Sandbox (`npm run dev:sandbox`): the demo contest lives only in this browser and nothing is read
+ * from or written to Firestore, so every phase can be tried without touching real contests.
+ */
+export const IS_SANDBOX = import.meta.env.VITE_LOCAL_ONLY === '1';
+const STORAGE_PREFIX = IS_SANDBOX ? 'eurotapa_sandbox' : 'eurotapa';
+
+const MULTI_STORAGE_KEY = `${STORAGE_PREFIX}_multicontest_v2`;
+const LEGACY_STORAGE_KEY = `${STORAGE_PREFIX}_state_v1`;
+const SESSION_STORAGE_KEY = `${STORAGE_PREFIX}_session_v2`;
+const SYNC_CHANNEL = `${STORAGE_PREFIX}_live_sync_v2`;
 
 let broadcastChannel: BroadcastChannel | null = null;
 try {
@@ -148,6 +156,7 @@ function hadLocalMultiData(): boolean {
 }
 
 async function fetchContestFromCloud(contestId: string): Promise<ContestState | null> {
+  if (IS_SANDBOX) return null;
   try {
     const snapshot = await getDoc(doc(db, 'concursos', contestId));
     if (!snapshot.exists()) return null;
@@ -302,6 +311,7 @@ function cacheMultiLocal(data: MultiContestData): MultiContestData {
 }
 
 function syncMultiToCloud(data: MultiContestData): void {
+  if (IS_SANDBOX) return;
   try {
     // Async sync active contest to Firestore
     const active = data.contests[data.activeContestId];
@@ -395,7 +405,7 @@ export function useContest() {
 
   // 0b. Contest registry: lets a fresh device list contests that are not cached locally yet
   useEffect(() => {
-    if (session) return;
+    if (session || IS_SANDBOX) return;
     let cancelled = false;
 
     (async () => {
@@ -426,6 +436,7 @@ export function useContest() {
     // 1. Firebase Firestore Live Listener for current contest
     let unsubscribeFirestore = () => {};
     try {
+      if (IS_SANDBOX) throw new Error('Sandbox: Firestore desactivado');
       const docRef = doc(db, 'concursos', activeContestId);
       unsubscribeFirestore = onSnapshot(
         docRef,
@@ -566,11 +577,19 @@ export function useContest() {
   const reorderTasting = useCallback(
     (orderedIds: string[]) => {
       updateCurrentContest((prev) => {
+        // Serving times belong to the turn, not to the team: they stay in place when teams swap turns
+        const timesByTurn = [...prev.teams]
+          .sort((a, b) => a.tastingOrder - b.tastingOrder)
+          .map((team) => team.tastingTime);
+
         const updatedTeams = prev.teams.map((team) => {
           const orderIndex = orderedIds.indexOf(team.id);
+          if (orderIndex === -1) return team;
+          const tastingTime = timesByTurn[orderIndex];
           return {
             ...team,
-            tastingOrder: orderIndex !== -1 ? orderIndex + 1 : team.tastingOrder
+            tastingOrder: orderIndex + 1,
+            ...(tastingTime ? { tastingTime } : {})
           };
         });
         return { ...prev, teams: updatedTeams };
@@ -579,15 +598,24 @@ export function useContest() {
     [updateCurrentContest]
   );
 
+  /** Marks the current serving order as the official one (after the random draw or a manual order). */
+  const confirmDraw = useCallback(() => {
+    updateCurrentContest((prev) => ({ ...prev, drawDoneAt: new Date().toISOString() }));
+  }, [updateCurrentContest]);
+
   const submitVote = useCallback(
     (vote: VoteRecord) => {
-      updateCurrentContest((prev) => ({
-        ...prev,
-        votes: {
-          ...prev.votes,
-          [vote.voterId]: vote
-        }
-      }));
+      updateCurrentContest((prev) => {
+        // Voting closes when the gala starts
+        if (prev.phase !== 'VOTACION') return prev;
+        return {
+          ...prev,
+          votes: {
+            ...prev.votes,
+            [vote.voterId]: vote
+          }
+        };
+      });
     },
     [updateCurrentContest]
   );
@@ -626,17 +654,15 @@ export function useContest() {
    */
   const nextGalaStep = useCallback(() => {
     updateCurrentContest((prev) => {
-      const votersList = prev.members.filter((m) => !!prev.votes[m.id]);
+      // One jury per tapa: the combined vote of the members of each team
+      const votersList = buildJuryVotes(prev.teams, prev.members, prev.votes);
       if (votersList.length === 0) return prev;
 
       const currentIdx = prev.gala.currentVoterIndex;
-      const currentVoter = votersList[currentIdx];
-      if (!currentVoter) {
+      const voteRecord = votersList[currentIdx];
+      if (!voteRecord) {
         return { ...prev, phase: 'PODIO' };
       }
-
-      const voteRecord = prev.votes[currentVoter.id];
-      if (!voteRecord) return prev;
 
       const sortedEntriesAscending = Object.entries(voteRecord.scores).sort((a, b) => a[1] - b[1]);
       const pending = sortedEntriesAscending.filter(
@@ -725,7 +751,7 @@ export function useContest() {
    */
   const undoGalaStep = useCallback(() => {
     updateCurrentContest((prev) => {
-      const votersList = prev.members.filter((m) => !!prev.votes[m.id]);
+      const votersList = buildJuryVotes(prev.teams, prev.members, prev.votes);
       const history = prev.gala.history ?? [];
 
       if (history.length > 0) {
@@ -738,10 +764,7 @@ export function useContest() {
         let lastAwardedPoints: number | undefined;
         if (previousBatch) {
           lastAwardedTapaId = previousBatch[previousBatch.length - 1];
-          const currentVoter = votersList[prev.gala.currentVoterIndex];
-          lastAwardedPoints = currentVoter
-            ? prev.votes[currentVoter.id]?.scores[lastAwardedTapaId]
-            : undefined;
+          lastAwardedPoints = votersList[prev.gala.currentVoterIndex]?.scores[lastAwardedTapaId];
         }
 
         return {
@@ -764,9 +787,7 @@ export function useContest() {
       if (index <= 0) return prev;
 
       const targetIndex = Math.min(index - 1, votersList.length - 1);
-      const targetVoter = votersList[targetIndex];
-      if (!targetVoter) return prev;
-      const vote = prev.votes[targetVoter.id];
+      const vote = votersList[targetIndex];
       if (!vote) return prev;
 
       const sorted = Object.entries(vote.scores).sort((a, b) => a[1] - b[1]);
@@ -818,6 +839,14 @@ export function useContest() {
     },
     [updateCurrentContest]
   );
+
+  /** Removes every serving time: the contest then shows only the order of the turns. */
+  const clearTastingSchedule = useCallback(() => {
+    updateCurrentContest((prev) => ({
+      ...prev,
+      teams: prev.teams.map(({ tastingTime: _removed, ...team }) => team)
+    }));
+  }, [updateCurrentContest]);
 
   const simulateSampleVotes = useCallback(() => {
     updateCurrentContest((prev) => {
@@ -1000,7 +1029,7 @@ export function useContest() {
         };
 
         // Async remove from Firestore
-        deleteDoc(doc(db, 'concursos', contestId)).catch(() => {});
+        if (!IS_SANDBOX) deleteDoc(doc(db, 'concursos', contestId)).catch(() => {});
 
         return persistMultiData(next);
       });
@@ -1274,6 +1303,7 @@ export function useContest() {
     updateMemberPin,
     regenerateMemberPin,
     reorderTasting,
+    confirmDraw,
     submitVote,
     removeVote,
     setActiveTasting,
@@ -1281,6 +1311,7 @@ export function useContest() {
     undoGalaStep,
     setGalaMode,
     generateTastingSchedule,
+    clearTastingSchedule,
     simulateSampleVotes,
     resetContest,
 

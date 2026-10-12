@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ContestState, RemoteContestSummary } from '../../types/contest';
 import { RulesModal } from '../RulesModal';
+import { TvIcon } from '../Icons';
+import { IS_SANDBOX } from '../../services/contestStore';
 import styles from './LoginView.module.css';
 
 interface LoginViewProps {
@@ -169,7 +171,8 @@ export function LoginView({
                 onClick={() => onLoginAsTV(selectedContestId)}
                 title="Abrir la pantalla grande para el televisor o proyector del salón"
               >
-                📺 Modo Pantalla TV
+                <TvIcon />
+                Modo Pantalla TV
               </button>
 
               <button
@@ -184,15 +187,22 @@ export function LoginView({
           </div>
         </form>
 
-        {/* Hints for demo testing */}
-        <div className={styles.demoHints}>
-          <div>
-            <strong>👨‍🍳 Participantes:</strong> Cada amigo introduce su código personal (ej: <code>1001</code> Carlos, <code>1002</code> Marta, <code>1003</code> Javier...).
+        {/* Hints for demo testing: never shipped in the published build */}
+        {import.meta.env.DEV && (
+          <div className={styles.demoHints}>
+            {IS_SANDBOX && (
+              <div style={{ marginBottom: '4px' }}>
+                <strong>Modo pruebas:</strong> los datos viven solo en este navegador y no tocan los concursos reales.
+              </div>
+            )}
+            <div>
+              <strong>Participantes:</strong> Cada amigo introduce su código personal (ej: <code>1001</code> Carlos, <code>1002</code> Marta, <code>1003</code> Javier...).
+            </div>
+            <div style={{ marginTop: '4px' }}>
+              <strong>Superadmin:</strong> PIN maestro <code>9999</code> para gestionar concursos, fases y participantes.
+            </div>
           </div>
-          <div style={{ marginTop: '4px' }}>
-            <strong>⚙️ Superadmin:</strong> PIN maestro <code>9999</code> para gestionar concursos, fases y participantes.
-          </div>
-        </div>
+        )}
       </div>
 
       {isRulesOpen && <RulesModal onClose={() => setIsRulesOpen(false)} />}

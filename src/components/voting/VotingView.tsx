@@ -1,8 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Member, Team, VoteRecord, ContestPhase } from '../../types/contest';
 import { membersOfTeam, teamLabel } from '../../utils/teams';
+import { formatDrawDate } from '../../utils/dates';
 import { TapaEditModal } from './TapaEditModal';
+import { RankingBallot } from './RankingBallot';
 import { RulesModal } from '../RulesModal';
+import { ConfirmDialog } from '../ConfirmDialog';
+import { AlertIcon, CheckIcon, LockIcon } from '../Icons';
 import styles from './VotingView.module.css';
 
 interface VotingViewProps {
@@ -11,6 +15,8 @@ interface VotingViewProps {
   currentMember?: Member | null;
   votes: Record<string, VoteRecord>;
   phase: ContestPhase;
+  /** ISO date when the official serving order was fixed; missing while the draw is pending. */
+  drawDoneAt?: string;
   onSubmitVote: (vote: VoteRecord) => void;
   onUpdateTeam: (team: Team) => void;
   onLogout?: () => void;
@@ -22,6 +28,7 @@ export function VotingView({
   currentMember: initialMember,
   votes,
   phase,
+  drawDoneAt,
   onSubmitVote,
   onUpdateTeam,
   onLogout
@@ -31,11 +38,11 @@ export function VotingView({
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(!!initialMember);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // Voting state: teamId -> points
-  const [assignedScores, setAssignedScores] = useState<Record<string, number>>({});
-  const [expandedTapaId, setExpandedTapaId] = useState<string | null>(null);
+  // Voting state: rival team ids from favourite to least favourite
+  const [ranking, setRanking] = useState<string[]>([]);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
   // Find active member (a person) and their team
   const currentMember = useMemo(() => {
@@ -64,22 +71,44 @@ export function VotingView({
 
   // Total points to distribute: from (number of rival tapas) down to 1
   const totalRivalsCount = rivals.length;
-  const availablePointsList = useMemo(() => {
-    const list: number[] = [];
-    for (let pts = totalRivalsCount; pts >= 1; pts--) {
-      list.push(pts);
+
+  // The unfinished ranking is kept on this phone, so a reload or a locked screen does not lose it
+  const draftKey = currentMember ? `eurotapa_vote_draft_${currentMember.id}` : null;
+  useEffect(() => {
+    if (!draftKey) return;
+    try {
+      const stored = JSON.parse(localStorage.getItem(draftKey) || '[]');
+      setRanking(Array.isArray(stored) ? stored.filter((id) => typeof id === 'string') : []);
+    } catch {
+      setRanking([]);
     }
-    return list;
-  }, [totalRivalsCount]);
+  }, [draftKey]);
 
-  // Which points are currently already used
-  const usedPoints = useMemo(() => new Set(Object.values(assignedScores)), [assignedScores]);
+  const updateRanking = (next: string[]) => {
+    setRanking(next);
+    try {
+      if (draftKey) localStorage.setItem(draftKey, JSON.stringify(next));
+    } catch {
+      // The draft is a convenience: voting still works without storage
+    }
+  };
 
-  // Check if all points are allocated
-  const isVoteComplete = useMemo(() => {
-    if (Object.keys(assignedScores).length !== totalRivalsCount) return false;
-    return availablePointsList.every((pts) => usedPoints.has(pts));
-  }, [assignedScores, totalRivalsCount, availablePointsList, usedPoints]);
+  // Only rivals that still exist count (a team may have been removed while the draft was open)
+  const rankedIds = useMemo(
+    () => ranking.filter((id, index) => rivals.some((r) => r.id === id) && ranking.indexOf(id) === index),
+    [ranking, rivals]
+  );
+
+  // Position decides the points: first place gets N-1, last place 1
+  const assignedScores = useMemo(() => {
+    const scores: Record<string, number> = {};
+    rankedIds.forEach((id, index) => {
+      scores[id] = totalRivalsCount - index;
+    });
+    return scores;
+  }, [rankedIds, totalRivalsCount]);
+
+  const isVoteComplete = totalRivalsCount > 0 && rankedIds.length === totalRivalsCount;
 
   // Has current member already submitted?
   const existingVote = currentMember ? votes[currentMember.id] : undefined;
@@ -116,38 +145,24 @@ export function VotingView({
     setIsAuthenticated(false);
     setEnteredPin('');
     setSelectedMemberId('');
-    setAssignedScores({});
-  };
-
-  const handleAssignPoint = (targetId: string, pointStr: string) => {
-    const pts = parseInt(pointStr, 10);
-    setAssignedScores((prev) => {
-      const next = { ...prev };
-      if (isNaN(pts) || pts <= 0) {
-        delete next[targetId];
-      } else {
-        Object.entries(next).forEach(([id, val]) => {
-          if (val === pts && id !== targetId) {
-            delete next[id];
-          }
-        });
-        next[targetId] = pts;
-      }
-      return next;
-    });
+    setRanking([]);
   };
 
   const handleSubmitVote = () => {
     if (!currentMember || !isVoteComplete) return;
 
-    if (window.confirm('¿Confirmas el envío definitivo de tus votos? No podrás modificarlos una vez sellados.')) {
-      const record: VoteRecord = {
-        voterId: currentMember.id,
-        voterName: currentMember.name,
-        scores: assignedScores,
-        submittedAt: new Date().toISOString()
-      };
-      onSubmitVote(record);
+    const record: VoteRecord = {
+      voterId: currentMember.id,
+      voterName: currentMember.name,
+      scores: assignedScores,
+      submittedAt: new Date().toISOString()
+    };
+    onSubmitVote(record);
+    setIsConfirmOpen(false);
+    try {
+      if (draftKey) localStorage.removeItem(draftKey);
+    } catch {
+      // ignore
     }
   };
 
@@ -233,7 +248,14 @@ export function VotingView({
   const hasIngredients = currentTeam.ingredients && currentTeam.ingredients.length > 0;
   const isProfileComplete = hasDishName && hasPhoto && hasIngredients;
 
-  const isVotingOpen = phase === 'VOTACION' || phase === 'GALA_TV' || phase === 'PODIO';
+  // Voting closes when the gala starts: a late vote would change the juries mid-reveal
+  const isVotingOpen = phase === 'VOTACION';
+  const isAfterTasting = isVotingOpen || phase === 'GALA_TV' || phase === 'PODIO';
+  const isTasting = phase === 'DEGUSTACION';
+  const isDrawDone = !!drawDoneAt;
+  const drawDate = drawDoneAt ? formatDrawDate(drawDoneAt) : '';
+  const teamsByTurn = [...teams].sort((a, b) => a.tastingOrder - b.tastingOrder);
+  const turnLabel = isDrawDone || isTasting || isAfterTasting ? `Turno #${currentTeam.tastingOrder}` : 'Turno por sortear';
 
   return (
     <div className={styles.votingContainer}>
@@ -243,7 +265,7 @@ export function VotingView({
           <span className="badge badge-green">Chef Conectado</span>
           <h2 style={{ fontSize: '1.6rem', marginTop: '4px' }}>{currentMember.name}</h2>
           <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            Equipo: <strong>{teamLabel(currentTeam, members)}</strong> · Turno #{currentTeam.tastingOrder} · PIN personal:{' '}
+            Equipo: <strong>{teamLabel(currentTeam, members)}</strong> · {turnLabel} · PIN personal:{' '}
             <span className="mono">{currentMember.pin}</span>
           </div>
         </div>
@@ -272,7 +294,7 @@ export function VotingView({
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
         <div className="flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
           <div className="flex items-center gap-2">
-            <span style={{ fontSize: '16px' }}>🔒</span>
+            <LockIcon />
             <h3 style={{ fontSize: '1.25rem' }}>Nuestra Tapa Secreta</h3>
           </div>
           <button
@@ -348,42 +370,114 @@ export function VotingView({
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', alignItems: 'center' }}>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Estado:</span>
           <span className={`badge ${hasDishName ? 'badge-green' : 'badge-yellow'}`}>
-            {hasDishName ? '✓ Nombre listo' : '⚠️ Falta nombre'}
+            {hasDishName ? <CheckIcon /> : <AlertIcon />}
+            {hasDishName ? 'Nombre listo' : 'Falta nombre'}
           </span>
           <span className={`badge ${hasPhoto ? 'badge-green' : 'badge-yellow'}`}>
-            {hasPhoto ? '✓ Foto subida' : '⚠️ Falta foto'}
+            {hasPhoto ? <CheckIcon /> : <AlertIcon />}
+            {hasPhoto ? 'Foto subida' : 'Falta foto'}
           </span>
           <span className={`badge ${hasIngredients ? 'badge-green' : 'badge-neutral'}`}>
-            {hasIngredients ? '✓ Ingredientes indicados' : '⚠️ Sin ingredientes'}
+            {hasIngredients ? <CheckIcon /> : <AlertIcon />}
+            {hasIngredients ? 'Ingredientes indicados' : 'Sin ingredientes'}
           </span>
         </div>
 
         <p style={{ fontSize: '12px', color: 'var(--text-muted)', backgroundColor: 'var(--color-canvas)', padding: '8px 12px', borderRadius: '4px', margin: 0 }}>
-          🔒 <strong>Confidencialidad absoluta:</strong> El organizador y los demás participantes solo ven que la ficha del equipo está completada ({isProfileComplete ? 'Completada' : 'Pendiente'}), pero nadie verá el plato ni los ingredientes hasta que llegue el turno de cata en la TV.
+          <strong>Confidencialidad absoluta:</strong> El organizador y los demás participantes solo ven que la ficha del equipo está completada ({isProfileComplete ? 'Completada' : 'Pendiente'}), pero nadie verá el plato ni los ingredientes hasta que llegue el turno de cata en la TV.
         </p>
       </div>
 
       {/* Voting Section */}
-      {!isVotingOpen ? (
-        /* Waiting banner while in SORTEO or DEGUSTACION */
-        <div className="card" style={{ textAlign: 'center', padding: '36px 20px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
-          <span className="badge badge-blue">
-            Fase Actual: {phase === 'SORTEO' ? 'Sorteo previo de cocina' : 'Degustación y Cata'}
-          </span>
-          <h3 style={{ fontSize: '1.5rem' }}>Las votaciones se abrirán tras la cata</h3>
-          <p style={{ color: 'var(--text-muted)', maxWidth: '440px', fontSize: '14px' }}>
-            Cocina y sirve tu plato cuando llegue vuestro <strong>Turno #{currentTeam.tastingOrder}</strong>. En cuanto todos los comensales hayan probado todas las tapas, el organizador activará aquí el reparto de puntos estilo Eurovisión.
-          </p>
-        </div>
+      {!isAfterTasting ? (
+        isTasting ? (
+          /* Contest day: tasting in progress */
+          <div className="card" style={{ textAlign: 'center', padding: '36px 20px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
+            <span className="badge badge-blue">Fase Actual: Degustación y Cata</span>
+            <h3 style={{ fontSize: '1.5rem' }}>Las votaciones se abrirán tras la cata</h3>
+            <p style={{ color: 'var(--text-muted)', maxWidth: '440px', fontSize: '14px' }}>
+              Cocina y sirve tu plato cuando llegue vuestro <strong>Turno #{currentTeam.tastingOrder}</strong>. En cuanto todos los comensales hayan probado todas las tapas, el organizador activará aquí el reparto de puntos estilo Eurovisión.
+            </p>
+          </div>
+        ) : isDrawDone ? (
+          /* Before the contest day, draw already made: the team knows its turn and can prepare */
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
+              <span className="badge badge-green">
+                Orden oficial{drawDate ? ` · sorteado el ${drawDate}` : ''}
+              </span>
+              <h3 style={{ fontSize: '1.5rem' }}>
+                {teamMembers.length > 1 ? 'Servís' : 'Sirves'} en el Turno #{currentTeam.tastingOrder} de {teams.length}
+                {currentTeam.tastingTime ? ` · ${currentTeam.tastingTime} h` : ''}
+              </h3>
+              <p style={{ color: 'var(--text-muted)', maxWidth: '440px', fontSize: '14px' }}>
+                {teamMembers.length > 1 ? 'Tenéis' : 'Tienes'} hasta el día del concurso para pensar la tapa, hacer pruebas y completar la ficha secreta.
+                Si la organización cambia algún turno, lo verás actualizado aquí.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
+              {teamsByTurn.map((team) => {
+                const isOwn = team.id === currentTeam.id;
+                return (
+                  <div
+                    key={team.id}
+                    className="flex items-center justify-between"
+                    style={{
+                      gap: '12px',
+                      padding: '6px 10px',
+                      borderRadius: '4px',
+                      fontSize: '14px',
+                      backgroundColor: isOwn ? 'var(--pastel-blue-bg)' : 'transparent',
+                      color: isOwn ? 'var(--pastel-blue-text)' : 'var(--text-body)',
+                      fontWeight: isOwn ? 600 : 400
+                    }}
+                  >
+                    <span style={{ minWidth: 0 }}>
+                      <span className="mono" style={{ marginRight: '8px' }}>#{team.tastingOrder}</span>
+                      {teamLabel(team, members)}
+                      {isOwn ? ' (tu equipo)' : ''}
+                    </span>
+                    {team.tastingTime && <span className="mono" style={{ flexShrink: 0 }}>{team.tastingTime} h</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          /* Before the contest day, draw still pending */
+          <div className="card" style={{ textAlign: 'center', padding: '36px 20px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
+            <span className="badge badge-yellow">Sorteo pendiente</span>
+            <h3 style={{ fontSize: '1.5rem' }}>Aún no se han sorteado los turnos</h3>
+            <p style={{ color: 'var(--text-muted)', maxWidth: '440px', fontSize: '14px' }}>
+              En cuanto la organización haga el sorteo verás aquí vuestro turno y el orden completo, con tiempo para preparar y ensayar la tapa. Mientras tanto ya puedes ir completando la ficha secreta.
+            </p>
+          </div>
+        )
       ) : existingVote ? (
         /* If already voted: Show locked confirmation */
         <div className="card" style={{ textAlign: 'center', padding: '36px 20px', display: 'flex', flexDirection: 'column', gap: '14px', alignItems: 'center' }}>
           <div className="badge badge-green" style={{ fontSize: '13px', padding: '6px 16px' }}>
-            ✓ Voto Sellado y Registrado
+            <CheckIcon />
+            Voto Sellado y Registrado
           </div>
           <h2 style={{ fontSize: '1.8rem' }}>¡Tus puntos han sido guardados!</h2>
           <p style={{ color: 'var(--text-muted)', maxWidth: '420px', fontSize: '14px' }}>
             Gracias por participar, {currentMember.name}. Los resultados se revelarán en directo en la pantalla de TV al comenzar la Gran Gala de EuroTapa.
+          </p>
+          {teamMembers.length > 1 && (
+            <p style={{ color: 'var(--text-muted)', maxWidth: '420px', fontSize: '13px' }}>
+              Tu reparto se sumará al del resto de tu equipo para formar un único voto de vuestra tapa.
+            </p>
+          )}
+        </div>
+      ) : !isVotingOpen ? (
+        /* Gala already started and this person did not vote in time */
+        <div className="card" style={{ textAlign: 'center', padding: '36px 20px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
+          <span className="badge badge-neutral">Votación cerrada</span>
+          <h3 style={{ fontSize: '1.5rem' }}>La gala ya ha comenzado</h3>
+          <p style={{ color: 'var(--text-muted)', maxWidth: '440px', fontSize: '14px' }}>
+            La votación se cerró al empezar la gala y tu voto no llegó a sellarse. Sigue los resultados en la pantalla de TV.
           </p>
         </div>
       ) : (
@@ -392,114 +486,28 @@ export function VotingView({
           <div className={styles.stickyHeader}>
             <div className="flex items-center justify-between">
               <span className="mono" style={{ fontSize: '12px', fontWeight: 600 }}>
-                PUNTOS A REPARTIR (DE {totalRivalsCount} A 1):
+                ORDENA LAS TAPAS (DE {totalRivalsCount} A 1 PUNTOS)
               </span>
               <span className="mono" style={{ fontSize: '12px', color: isVoteComplete ? 'var(--pastel-green-text)' : 'var(--text-muted)' }}>
-                {Object.keys(assignedScores).length}/{totalRivalsCount} asignados
+                {rankedIds.length}/{totalRivalsCount} ordenadas
               </span>
             </div>
-
-            <div className={styles.remainingPointsBar}>
-              {availablePointsList.map((pts) => {
-                const isUsed = usedPoints.has(pts);
-                return (
-                  <span
-                    key={pts}
-                    className={`${styles.pointBadge} ${isUsed ? styles.pointBadgeUsed : ''}`}
-                    title={isUsed ? `Punto ${pts} asignado` : `Punto ${pts} disponible`}
-                  >
-                    {pts}
-                  </span>
-                );
-              })}
-            </div>
+            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+              Toca las tapas de tu favorita a la que menos te gustó. Después arrastra o usa las flechas para ajustar.
+            </span>
           </div>
 
-          <div className={styles.rivalsList}>
-            {rivals.map((rival) => {
-              const currentScore = assignedScores[rival.id];
-              const isExpanded = expandedTapaId === rival.id;
-
-              return (
-                <div key={rival.id} className={styles.tapaCard}>
-                  <div className={styles.tapaHeader}>
-                    {rival.photoUrl ? (
-                      <img src={rival.photoUrl} alt={rival.dishName} className={styles.tapaThumb} />
-                    ) : (
-                      <div className={styles.tapaThumb} style={{ backgroundColor: 'var(--color-canvas)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '11px' }}>
-                        Sin foto
-                      </div>
-                    )}
-
-                    <div className={styles.tapaInfo}>
-                      <div className={styles.dishTitle}>{rival.dishName || `Tapa de ${teamLabel(rival, members)}`}</div>
-                      <div className={styles.authorText}>Equipo: {teamLabel(rival, members)}</div>
-                    </div>
-
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => setExpandedTapaId(isExpanded ? null : rival.id)}
-                      style={{ padding: '4px 8px' }}
-                      title="Ver ingredientes y detalles"
-                    >
-                      {isExpanded ? 'Ocultar' : 'Ficha'}
-                    </button>
-                  </div>
-
-                  {isExpanded && (
-                    <div className={styles.accordionContent}>
-                      {rival.description && <p style={{ marginBottom: '8px' }}>{rival.description}</p>}
-                      {rival.ingredients.length > 0 && (
-                        <div>
-                          <strong>Ingredientes:</strong> {rival.ingredients.join(', ')}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div className={styles.pointAssignmentArea}>
-                    <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                      Puntos para esta tapa:
-                    </span>
-
-                    <div className="flex items-center gap-2">
-                      {currentScore && (
-                        <span className={styles.assignedPill}>
-                          ★ {currentScore} {currentScore === 1 ? 'pt' : 'pts'}
-                        </span>
-                      )}
-
-                      <select
-                        className={styles.selectorSelect}
-                        value={currentScore || ''}
-                        onChange={(e) => handleAssignPoint(rival.id, e.target.value)}
-                      >
-                        <option value="">-- Asignar puntos --</option>
-                        {availablePointsList.map((pts) => {
-                          const isAssignedElsewhere = usedPoints.has(pts) && currentScore !== pts;
-                          return (
-                            <option key={pts} value={pts} disabled={isAssignedElsewhere}>
-                              {pts} puntos {isAssignedElsewhere ? '(Ya asignado)' : ''}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <RankingBallot rivals={rivals} members={members} ranking={rankedIds} onChange={updateRanking} />
 
           <button
             className="btn btn-primary"
             style={{ width: '100%', padding: '14px', fontSize: '16px' }}
             disabled={!isVoteComplete}
-            onClick={handleSubmitVote}
+            onClick={() => setIsConfirmOpen(true)}
           >
             {isVoteComplete
               ? 'Sellar y Enviar mis Puntos'
-              : `Asigna todos los puntos (${Object.keys(assignedScores).length}/${totalRivalsCount})`}
+              : `Ordena todas las tapas (${rankedIds.length}/${totalRivalsCount})`}
           </button>
         </>
       )}
@@ -516,6 +524,35 @@ export function VotingView({
 
       {/* Rules modal */}
       {isRulesModalOpen && <RulesModal onClose={() => setIsRulesModalOpen(false)} />}
+
+      {/* Final confirmation before sealing the vote */}
+      {isConfirmOpen && (
+        <ConfirmDialog
+          title="¿Sellar tu voto?"
+          confirmLabel="Sellar y Enviar mis Puntos"
+          cancelLabel="Revisar otra vez"
+          onConfirm={handleSubmitVote}
+          onCancel={() => setIsConfirmOpen(false)}
+        >
+          <p style={{ marginBottom: '12px' }}>
+            Este es tu reparto. Una vez sellado no podrás modificarlo.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {rankedIds
+              .flatMap((id) => rivals.filter((r) => r.id === id))
+              .map((rival) => (
+                <div key={rival.id} className="flex items-center justify-between" style={{ gap: '12px' }}>
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {rival.dishName || `Tapa de ${teamLabel(rival, members)}`}
+                  </span>
+                  <span className="mono" style={{ fontWeight: 700, flexShrink: 0 }}>
+                    {assignedScores[rival.id]} {assignedScores[rival.id] === 1 ? 'pt' : 'pts'}
+                  </span>
+                </div>
+              ))}
+          </div>
+        </ConfirmDialog>
+      )}
     </div>
   );
 }

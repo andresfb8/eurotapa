@@ -1,20 +1,32 @@
+import { useState } from 'react';
 import { ScoreboardItem } from '../../types/contest';
+import { CheckIcon, CrownIcon } from '../Icons';
 
 interface PodiumViewProps {
   finalRanking: ScoreboardItem[];
+  /** False on the public TV screen: only the organizer can send the contest back to the start. */
+  canControl: boolean;
   onRestart: () => void;
 }
 
-export function PodiumView({ finalRanking, onRestart }: PodiumViewProps) {
+export function PodiumView({ finalRanking, canControl, onRestart }: PodiumViewProps) {
+  const [isCopied, setIsCopied] = useState(false);
   const first = finalRanking[0];
   const second = finalRanking[1];
   const third = finalRanking[2];
 
+  // Fully tied tapas share the position, so the side cards may also be a 1º (or both a 2º)
+  const sharedFirst = !!second && second.rank === 1;
+  const positionLabel = (rank: number) => (rank === 1 ? 'Campeón · Empate' : `${rank}º Lugar`);
+
   const handleShareWinners = async () => {
     let msg = `🏆 *RESULTADOS FINALES — EUROTAPA 2026* 🏆\n\n`;
-    if (first) msg += `🥇 *1º PUESTO:* ${first.name} — "${first.dishName}" (${first.totalPoints} pts)\n`;
-    if (second) msg += `🥈 *2º PUESTO:* ${second.name} — "${second.dishName}" (${second.totalPoints} pts)\n`;
-    if (third) msg += `🥉 *3º PUESTO:* ${third.name} — "${third.dishName}" (${third.totalPoints} pts)\n\n`;
+    const medals: Record<number, string> = { 1: '🥇', 2: '🥈', 3: '🥉' };
+    [first, second, third].forEach((item) => {
+      if (!item) return;
+      msg += `${medals[item.rank] ?? '🏅'} *${item.rank}º PUESTO:* ${item.name} — "${item.dishName}" (${item.totalPoints} pts)\n`;
+    });
+    msg += `\n`;
 
     msg += `*CLASIFICACIÓN GENERAL:*\n`;
     finalRanking.forEach((item) => {
@@ -23,7 +35,8 @@ export function PodiumView({ finalRanking, onRestart }: PodiumViewProps) {
 
     try {
       await navigator.clipboard.writeText(msg);
-      alert('¡Clasificación final copiada al portapapeles para WhatsApp!');
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 3500);
     } catch {
       // fallback
     }
@@ -68,7 +81,9 @@ export function PodiumView({ finalRanking, onRestart }: PodiumViewProps) {
               justifyContent: 'space-between'
             }}
           >
-            <span className="badge badge-neutral" style={{ fontSize: '13px' }}>🥈 2º Lugar</span>
+            <span className={`badge ${second.rank === 1 ? 'badge-yellow' : 'badge-neutral'}`} style={{ fontSize: '13px' }}>
+              {positionLabel(second.rank)}
+            </span>
             {second.photoUrl && (
               <img
                 src={second.photoUrl}
@@ -103,7 +118,8 @@ export function PodiumView({ finalRanking, onRestart }: PodiumViewProps) {
             }}
           >
             <span className="badge badge-yellow" style={{ fontSize: '14px', padding: '6px 14px' }}>
-              👑 CAMPEÓN EUROTAPA
+              <CrownIcon />
+              {sharedFirst ? 'CAMPEÓN EUROTAPA · EMPATE' : 'CAMPEÓN EUROTAPA'}
             </span>
             {first.photoUrl && (
               <img
@@ -139,7 +155,9 @@ export function PodiumView({ finalRanking, onRestart }: PodiumViewProps) {
               justifyContent: 'space-between'
             }}
           >
-            <span className="badge badge-neutral" style={{ fontSize: '13px' }}>🥉 3º Lugar</span>
+            <span className={`badge ${third.rank === 1 ? 'badge-yellow' : 'badge-neutral'}`} style={{ fontSize: '13px' }}>
+              {positionLabel(third.rank)}
+            </span>
             {third.photoUrl && (
               <img
                 src={third.photoUrl}
@@ -161,17 +179,23 @@ export function PodiumView({ finalRanking, onRestart }: PodiumViewProps) {
       {/* Action buttons */}
       <div className="flex items-center justify-center gap-4">
         <button className="btn btn-primary" onClick={handleShareWinners}>
-          <svg className="icon" viewBox="0 0 24 24">
-            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-            <polyline points="16 6 12 2 8 6" />
-            <line x1="12" y1="2" x2="12" y2="15" />
-          </svg>
-          Compartir Resultados en WhatsApp
+          {isCopied ? (
+            <CheckIcon />
+          ) : (
+            <svg className="icon" viewBox="0 0 24 24">
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+              <polyline points="16 6 12 2 8 6" />
+              <line x1="12" y1="2" x2="12" y2="15" />
+            </svg>
+          )}
+          {isCopied ? 'Clasificación copiada para WhatsApp' : 'Compartir Resultados en WhatsApp'}
         </button>
 
-        <button className="btn btn-secondary" onClick={onRestart}>
-          Volver al Inicio
-        </button>
+        {canControl && (
+          <button className="btn btn-secondary" onClick={onRestart}>
+            Volver al Inicio
+          </button>
+        )}
       </div>
 
       {/* Full Classification Table */}

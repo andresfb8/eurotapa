@@ -5,6 +5,7 @@ import { LoginView } from './components/auth/LoginView';
 import { DrawView } from './components/draw/DrawView';
 import { TastingView } from './components/tasting/TastingView';
 import { VotingView } from './components/voting/VotingView';
+import { VotingTVView } from './components/voting/VotingTVView';
 import { GalaTVView } from './components/gala/GalaTVView';
 import { AdminPanel } from './components/admin/AdminPanel';
 
@@ -16,6 +17,7 @@ export function App() {
     updateMemberPin,
     regenerateMemberPin,
     reorderTasting,
+    confirmDraw,
     submitVote,
     removeVote,
     setActiveTasting,
@@ -23,6 +25,7 @@ export function App() {
     undoGalaStep,
     setGalaMode,
     generateTastingSchedule,
+    clearTastingSchedule,
     simulateSampleVotes,
     resetContest,
 
@@ -51,8 +54,9 @@ export function App() {
   // Tab for superadmin: 'admin' or 'tv' preview
   const [adminTab, setAdminTab] = useState<AdminViewTab>('admin');
 
-  // TV View router based on contest state phase
-  const renderTVContent = () => {
+  // TV View router based on contest state phase.
+  // canControl is false for the public TV screen (no PIN needed to open it), so it can only display.
+  const renderTVContent = (canControl: boolean) => {
     switch (state.phase) {
       case 'CONFIGURACION':
       case 'SORTEO':
@@ -61,7 +65,10 @@ export function App() {
             title={state.title}
             teams={state.teams}
             members={state.members}
+            drawDoneAt={state.drawDoneAt}
+            canControl={canControl}
             onReorder={reorderTasting}
+            onConfirmDraw={confirmDraw}
             onProceedToTasting={() => setPhase('DEGUSTACION')}
           />
         );
@@ -72,74 +79,23 @@ export function App() {
             teams={state.teams}
             members={state.members}
             activeId={state.activeTastingId}
+            canControl={canControl}
             onSelectActive={setActiveTasting}
             onProceedToVoting={() => setPhase('VOTACION')}
           />
         );
 
-      case 'VOTACION': {
-        const total = state.members.length;
-        const voted = Object.keys(state.votes).length;
-
+      case 'VOTACION':
         return (
-          <div
-            className="container"
-            style={{
-              maxWidth: '820px',
-              padding: '60px 24px',
-              textAlign: 'center',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '24px'
-            }}
-          >
-            <span className="badge badge-green" style={{ padding: '6px 16px', fontSize: '13px' }}>
-              Votación en Curso
-            </span>
-            <h1 style={{ fontSize: '3rem' }}>El Jurado está Votando</h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: '16px', maxWidth: '540px' }}>
-              Cada participante está puntuando las tapas rivales desde su teléfono móvil (de {Math.max(state.teams.length - 1, 0)} puntos a 1).
-            </p>
-
-            <div
-              className="card"
-              style={{
-                width: '100%',
-                padding: '32px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '14px'
-              }}
-            >
-              <span className="mono" style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                PROGRESO EN TIEMPO REAL
-              </span>
-              <div className="mono" style={{ fontSize: '3.5rem', fontWeight: 800 }}>
-                {voted} / {total}
-              </div>
-              <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
-                {voted === total ? '¡Todos los votos han sido recibidos!' : 'Esperando los últimos votos...'}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <button
-                className="btn btn-primary"
-                style={{ padding: '12px 24px', fontSize: '15px' }}
-                onClick={() => setPhase('GALA_TV')}
-                disabled={voted === 0}
-              >
-                Comenzar la Gran Gala de Eurovisión
-                <svg className="icon" viewBox="0 0 24 24">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              </button>
-            </div>
-          </div>
+          <VotingTVView
+            teams={state.teams}
+            members={state.members}
+            votedCount={Object.keys(state.votes).length}
+            totalVoters={state.members.length}
+            canControl={canControl}
+            onStartGala={() => setPhase('GALA_TV')}
+          />
         );
-      }
 
       case 'GALA_TV':
       case 'PODIO':
@@ -151,6 +107,7 @@ export function App() {
             gala={state.gala}
             phase={state.phase}
             galaMode={state.galaMode}
+            canControl={canControl}
             onNextGalaStep={nextGalaStep}
             onUndoGalaStep={undoGalaStep}
             onRestart={() => setPhase('SORTEO')}
@@ -210,6 +167,7 @@ export function App() {
           currentMember={currentMember}
           votes={state.votes}
           phase={state.phase}
+          drawDoneAt={state.drawDoneAt}
           onSubmitVote={submitVote}
           onUpdateTeam={updateTeam}
           onLogout={logout}
@@ -266,7 +224,7 @@ export function App() {
           </div>
         </header>
 
-        <main style={{ flex: 1 }}>{renderTVContent()}</main>
+        <main style={{ flex: 1 }}>{renderTVContent(false)}</main>
       </div>
     );
   }
@@ -299,13 +257,16 @@ export function App() {
             onSetPhase={setPhase}
             onSetGalaMode={setGalaMode}
             onGenerateSchedule={generateTastingSchedule}
+            onClearSchedule={clearTastingSchedule}
+            onReorder={reorderTasting}
+            onConfirmDraw={confirmDraw}
             onSimulateVotes={simulateSampleVotes}
             onReset={resetContest}
             onOpenTV={() => setAdminTab('tv')}
             onLogout={logout}
           />
         ) : (
-          renderTVContent()
+          renderTVContent(true)
         )}
       </main>
     </div>
