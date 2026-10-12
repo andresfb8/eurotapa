@@ -8,7 +8,8 @@ import { GalaCompanion } from './GalaCompanion';
 import { TastingCompanion } from './TastingCompanion';
 import { RulesModal } from '../RulesModal';
 import { ConfirmDialog } from '../ConfirmDialog';
-import { AlertIcon, CheckIcon, LockIcon } from '../Icons';
+import { AlertIcon, CheckIcon, ChevronDownIcon, LockIcon, LogoutIcon } from '../Icons';
+import { Confetti } from '../Confetti';
 import styles from './VotingView.module.css';
 
 interface VotingViewProps {
@@ -54,6 +55,8 @@ export function VotingView({
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  // null = follow the phase (folded while tasting and voting); true/false once the person toggles it
+  const [fichaOverride, setFichaOverride] = useState<boolean | null>(null);
 
   // Find active member (a person) and their team
   const currentMember = useMemo(() => {
@@ -292,38 +295,152 @@ export function VotingView({
   const teamsByTurn = [...teams].sort((a, b) => a.tastingOrder - b.tastingOrder);
   const turnLabel = isDrawDone || isTasting || isAfterTasting ? `Turno #${currentTeam.tastingOrder}` : 'Turno por sortear';
 
-  return (
-    <div className={styles.votingContainer}>
-      {/* Member Header (Exclusive for this person) */}
-      <div className={styles.editTapaCard}>
-        <div>
-          <span className="badge badge-green">Chef Conectado</span>
-          <h2 style={{ fontSize: '1.6rem', marginTop: '4px' }}>{currentMember.name}</h2>
-          <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            Equipo: <strong>{teamLabel(currentTeam, members)}</strong> · {turnLabel} · PIN personal:{' '}
-            <span className="mono">{currentMember.pin}</span>
+  const isBallotOpen = isVotingOpen && !existingVote;
+  const remaining = totalRivalsCount - rankedIds.length;
+  const nextPoints = remaining;
+
+  // While tasting and voting the own tapa stays folded, so the action starts at the top
+  const isFichaOpen = fichaOverride ?? !(isVotingOpen || isTasting);
+
+  const progressHint =
+    rankedIds.length === 0
+      ? `Toca tu favorita: se lleva ${totalRivalsCount} puntos.`
+      : isVoteComplete
+      ? 'Todo ordenado. Arrastra para ajustar o sella tu voto.'
+      : `Toca la siguiente: se lleva ${nextPoints} ${nextPoints === 1 ? 'punto' : 'puntos'}.`;
+
+  const fichaCard = isFichaOpen ? (
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      <div className="flex items-center justify-between" style={{ gap: '8px', flexWrap: 'wrap' }}>
+        <div className="flex items-center gap-2">
+          <LockIcon />
+          <h3 style={{ fontSize: '1.25rem' }}>{teamMembers.length > 1 ? 'Nuestra tapa secreta' : 'Mi tapa secreta'}</h3>
+        </div>
+        <button className="btn btn-primary btn-sm" onClick={() => setIsEditModalOpen(true)}>
+          <svg className="icon" viewBox="0 0 24 24">
+            <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+          </svg>
+          Editar ficha y foto
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', gap: '14px', alignItems: 'center' }}>
+        {currentTeam.photoUrl ? (
+          <img
+            src={currentTeam.photoUrl}
+            alt={currentTeam.dishName}
+            style={{ width: '88px', height: '88px', borderRadius: 'var(--radius-md)', objectFit: 'cover', flexShrink: 0 }}
+          />
+        ) : (
+          <div
+            style={{
+              width: '88px',
+              height: '88px',
+              borderRadius: 'var(--radius-md)',
+              backgroundColor: 'var(--color-canvas)',
+              border: '2px dashed var(--border-color-strong)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '12px',
+              color: 'var(--text-muted)',
+              flexShrink: 0
+            }}
+          >
+            Sin foto
+          </div>
+        )}
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.3rem', lineHeight: 1.15, color: 'var(--text-primary)' }}>
+            {currentTeam.dishName || 'Aún sin nombre'}
+          </div>
+          <div style={{ fontSize: '14px', color: 'var(--text-body)', marginTop: '4px' }}>
+            {currentTeam.description || 'Pulsa "Editar ficha y foto" para contar cómo está hecha.'}
           </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => setIsRulesModalOpen(true)}
-            title="Ver normativa del concurso"
-          >
-            ? Normativa
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={handleLogout}
-            title="Salir y cambiar de usuario"
-          >
-            Cerrar Sesión
-          </button>
-        </div>
       </div>
+
+      {currentTeam.ingredients.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+          {currentTeam.ingredients.map((ing, i) => (
+            <span key={i} className="badge badge-neutral" style={{ textTransform: 'none' }}>
+              {ing}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+        <span className={`badge ${hasDishName ? 'badge-green' : 'badge-yellow'}`}>
+          {hasDishName ? <CheckIcon /> : <AlertIcon />}
+          {hasDishName ? 'Nombre listo' : 'Falta nombre'}
+        </span>
+        <span className={`badge ${hasPhoto ? 'badge-green' : 'badge-yellow'}`}>
+          {hasPhoto ? <CheckIcon /> : <AlertIcon />}
+          {hasPhoto ? 'Foto subida' : 'Falta foto'}
+        </span>
+        <span className={`badge ${hasIngredients ? 'badge-green' : 'badge-neutral'}`}>
+          {hasIngredients ? <CheckIcon /> : <AlertIcon />}
+          {hasIngredients ? 'Ingredientes' : 'Sin ingredientes'}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', fontSize: '13px', color: 'var(--text-muted)' }}>
+        <span>Cocinan:</span>
+        {teamMembers.map((m) => (
+          <span key={m.id} className={`badge ${m.id === currentMember.id ? 'badge-blue' : 'badge-neutral'}`} style={{ textTransform: 'none' }}>
+            {m.name}
+            {m.id === currentMember.id ? ' (tú)' : ''}
+          </span>
+        ))}
+        <span style={{ marginLeft: 'auto' }}>
+          Tu PIN: <span className="mono" style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{currentMember.pin}</span>
+        </span>
+      </div>
+
+      <p style={{ fontSize: '13px', color: 'var(--text-muted)', backgroundColor: 'var(--color-canvas)', padding: '10px 12px', borderRadius: 'var(--radius-sm)', margin: 0 }}>
+        <strong>Es secreta:</strong> la organización y el resto solo ven si la ficha está {isProfileComplete ? 'completa' : 'pendiente'}.
+        Nadie verá el plato hasta que salga en la TV en su turno.
+      </p>
+
+      {(isVotingOpen || isTasting) && (
+        <button type="button" className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setFichaOverride(false)}>
+          Ocultar
+        </button>
+      )}
+    </div>
+  ) : (
+    <button type="button" className={styles.fichaToggle} onClick={() => setFichaOverride(true)} aria-expanded="false">
+      <LockIcon />
+      <span className={styles.fichaToggleText}>
+        {teamMembers.length > 1 ? 'Nuestra tapa' : 'Mi tapa'}: <strong>{currentTeam.dishName || 'sin nombre todavía'}</strong>
+      </span>
+      <ChevronDownIcon />
+    </button>
+  );
+
+  return (
+    <div className={`${styles.votingContainer} ${isBallotOpen ? styles.withBottomBar : ''}`}>
+      {/* Who is logged in, in one line */}
+      <header className={styles.topBar}>
+        <div className={styles.avatar} aria-hidden="true">
+          {currentMember.name.slice(0, 2).toUpperCase()}
+        </div>
+        <div className={styles.topBarInfo}>
+          <span className={styles.topBarName}>{currentMember.name}</span>
+          <span className={styles.topBarMeta}>
+            {teamMembers.length > 1 ? `${teamLabel(currentTeam, members)} · ` : ''}
+            {turnLabel}
+          </span>
+        </div>
+        <button type="button" className={styles.iconBtn} onClick={() => setIsRulesModalOpen(true)} aria-label="Ver la normativa">
+          ?
+        </button>
+        <button type="button" className={styles.iconBtn} onClick={handleLogout} aria-label="Cerrar sesión">
+          <LogoutIcon />
+        </button>
+      </header>
 
       {/* Gala night: the phone follows the TV with this person's own tapa in focus */}
       {isGalaLive && (
@@ -353,107 +470,9 @@ export function VotingView({
         />
       )}
 
-      {/* Secret Tapa Management Card (Editable by any member of the team) */}
-      {!isGalaLive && (
-      <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-        <div className="flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
-          <div className="flex items-center gap-2">
-            <LockIcon />
-            <h3 style={{ fontSize: '1.25rem' }}>Nuestra Tapa Secreta</h3>
-          </div>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={() => setIsEditModalOpen(true)}
-          >
-            <svg className="icon" viewBox="0 0 24 24">
-              <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-            </svg>
-            Editar Ficha y Foto
-          </button>
-        </div>
+      {/* Before tasting the own tapa is the main thing; later it moves below the action */}
+      {!isGalaLive && !isTasting && !isVotingOpen && fichaCard}
 
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-          {currentTeam.photoUrl ? (
-            <img
-              src={currentTeam.photoUrl}
-              alt={currentTeam.dishName}
-              style={{ width: '80px', height: '80px', borderRadius: '8px', objectFit: 'cover', border: '1px solid var(--border-color)' }}
-            />
-          ) : (
-            <div
-              style={{
-                width: '80px',
-                height: '80px',
-                borderRadius: '8px',
-                backgroundColor: 'var(--color-canvas)',
-                border: '1px dashed var(--border-color)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '11px',
-                color: 'var(--text-muted)',
-                textAlign: 'center',
-                padding: '4px'
-              }}
-            >
-              Sin foto
-            </div>
-          )}
-
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.4rem', color: 'var(--text-primary)' }}>
-              {currentTeam.dishName || 'Sin título definido'}
-            </div>
-            <div style={{ fontSize: '13px', color: 'var(--text-body)', marginTop: '4px' }}>
-              {currentTeam.description || 'Pulsa en "Editar Ficha y Foto" para añadir la elaboración.'}
-            </div>
-            {currentTeam.ingredients.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
-                {currentTeam.ingredients.map((ing, i) => (
-                  <span key={i} className="badge badge-neutral" style={{ fontSize: '11px', textTransform: 'none' }}>
-                    {ing}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Team members */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Cocinan esta tapa:</span>
-          {teamMembers.map((m) => (
-            <span key={m.id} className={`badge ${m.id === currentMember.id ? 'badge-blue' : 'badge-neutral'}`} style={{ fontSize: '11px', textTransform: 'none' }}>
-              {m.name}
-              {m.id === currentMember.id ? ' (tú)' : ''}
-            </span>
-          ))}
-        </div>
-
-        {/* Readiness Checklist */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', alignItems: 'center' }}>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Estado:</span>
-          <span className={`badge ${hasDishName ? 'badge-green' : 'badge-yellow'}`}>
-            {hasDishName ? <CheckIcon /> : <AlertIcon />}
-            {hasDishName ? 'Nombre listo' : 'Falta nombre'}
-          </span>
-          <span className={`badge ${hasPhoto ? 'badge-green' : 'badge-yellow'}`}>
-            {hasPhoto ? <CheckIcon /> : <AlertIcon />}
-            {hasPhoto ? 'Foto subida' : 'Falta foto'}
-          </span>
-          <span className={`badge ${hasIngredients ? 'badge-green' : 'badge-neutral'}`}>
-            {hasIngredients ? <CheckIcon /> : <AlertIcon />}
-            {hasIngredients ? 'Ingredientes indicados' : 'Sin ingredientes'}
-          </span>
-        </div>
-
-        <p style={{ fontSize: '12px', color: 'var(--text-muted)', backgroundColor: 'var(--color-canvas)', padding: '8px 12px', borderRadius: '4px', margin: 0 }}>
-          <strong>Confidencialidad absoluta:</strong> El organizador y los demás participantes solo ven que la ficha del equipo está completada ({isProfileComplete ? 'Completada' : 'Pendiente'}), pero nadie verá el plato ni los ingredientes hasta que llegue el turno de cata en la TV.
-        </p>
-      </div>
-      )}
-
-      {/* Voting Section */}
       {!isAfterTasting ? (
         isTasting ? null : isDrawDone ? (
           /* Before the contest day, draw already made: the team knows its turn and can prepare */
@@ -462,35 +481,24 @@ export function VotingView({
               <span className="badge badge-green">
                 Orden oficial{drawDate ? ` · sorteado el ${drawDate}` : ''}
               </span>
-              <h3 style={{ fontSize: '1.5rem' }}>
-                {teamMembers.length > 1 ? 'Servís' : 'Sirves'} en el Turno #{currentTeam.tastingOrder} de {teams.length}
+              <div className={styles.companionRank}>#{currentTeam.tastingOrder}</div>
+              <h3 style={{ fontSize: '1.4rem' }}>
+                {teamMembers.length > 1 ? 'Servís' : 'Sirves'} en el turno {currentTeam.tastingOrder} de {teams.length}
                 {currentTeam.tastingTime ? ` · ${currentTeam.tastingTime} h` : ''}
               </h3>
-              <p style={{ color: 'var(--text-muted)', maxWidth: '440px', fontSize: '14px' }}>
+              <p style={{ color: 'var(--text-muted)', maxWidth: '440px', fontSize: '15px' }}>
                 {teamMembers.length > 1 ? 'Tenéis' : 'Tienes'} hasta el día del concurso para pensar la tapa, hacer pruebas y completar la ficha secreta.
                 Si la organización cambia algún turno, lo verás actualizado aquí.
               </p>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               {teamsByTurn.map((team) => {
                 const isOwn = team.id === currentTeam.id;
                 return (
-                  <div
-                    key={team.id}
-                    className="flex items-center justify-between"
-                    style={{
-                      gap: '12px',
-                      padding: '6px 10px',
-                      borderRadius: '4px',
-                      fontSize: '14px',
-                      backgroundColor: isOwn ? 'var(--pastel-blue-bg)' : 'transparent',
-                      color: isOwn ? 'var(--pastel-blue-text)' : 'var(--text-body)',
-                      fontWeight: isOwn ? 600 : 400
-                    }}
-                  >
-                    <span style={{ minWidth: 0 }}>
-                      <span className="mono" style={{ marginRight: '8px' }}>#{team.tastingOrder}</span>
+                  <div key={team.id} className={`${styles.companionRow} ${isOwn ? styles.companionRowOwn : ''}`}>
+                    <span className="mono" style={{ width: '30px', flexShrink: 0 }}>#{team.tastingOrder}</span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
                       {teamLabel(team, members)}
                       {isOwn ? ' (tu equipo)' : ''}
                     </span>
@@ -505,52 +513,60 @@ export function VotingView({
           <div className="card" style={{ textAlign: 'center', padding: '36px 20px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
             <span className="badge badge-yellow">Sorteo pendiente</span>
             <h3 style={{ fontSize: '1.5rem' }}>Aún no se han sorteado los turnos</h3>
-            <p style={{ color: 'var(--text-muted)', maxWidth: '440px', fontSize: '14px' }}>
+            <p style={{ color: 'var(--text-muted)', maxWidth: '440px', fontSize: '15px' }}>
               En cuanto la organización haga el sorteo verás aquí vuestro turno y el orden completo, con tiempo para preparar y ensayar la tapa. Mientras tanto ya puedes ir completando la ficha secreta.
             </p>
           </div>
         )
       ) : existingVote && isGalaLive ? null : existingVote ? (
-        /* If already voted: Show locked confirmation */
-        <div className="card" style={{ textAlign: 'center', padding: '36px 20px', display: 'flex', flexDirection: 'column', gap: '14px', alignItems: 'center' }}>
-          <div className="badge badge-green" style={{ fontSize: '13px', padding: '6px 16px' }}>
+        /* Already voted: sealed */
+        <div className={`card ${styles.sealedCard}`}>
+          <Confetti count={28} />
+          <div className={styles.stamp}>
             <CheckIcon />
-            Voto Sellado y Registrado
+            Voto
+            <br />
+            sellado
           </div>
-          <h2 style={{ fontSize: '1.8rem' }}>¡Tus puntos han sido guardados!</h2>
-          <p style={{ color: 'var(--text-muted)', maxWidth: '420px', fontSize: '14px' }}>
-            Gracias por participar, {currentMember.name}. Los resultados se revelarán en directo en la pantalla de TV al comenzar la Gran Gala de EuroTapa.
+          <h2 style={{ fontSize: '1.8rem' }}>¡Hecho, {currentMember.name}!</h2>
+          <p style={{ color: 'var(--text-muted)', maxWidth: '420px', fontSize: '15px' }}>
+            Tus puntos están guardados. Los resultados se revelan en directo en la pantalla grande cuando empiece la gala, y aquí verás cómo va tu tapa.
           </p>
           {teamMembers.length > 1 && (
-            <p style={{ color: 'var(--text-muted)', maxWidth: '420px', fontSize: '13px' }}>
-              Tu reparto se sumará al del resto de tu equipo para formar un único voto de vuestra tapa.
+            <p style={{ color: 'var(--text-muted)', maxWidth: '420px', fontSize: '14px' }}>
+              Tu reparto se suma al del resto de tu equipo para formar un único voto de vuestra tapa.
             </p>
           )}
         </div>
       ) : !isVotingOpen ? (
         /* Gala already started and this person did not vote in time */
-        <div className="card" style={{ textAlign: 'center', padding: '36px 20px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
+        <div className="card" style={{ textAlign: 'center', padding: '32px 20px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
           <span className="badge badge-neutral">Votación cerrada</span>
           <h3 style={{ fontSize: '1.5rem' }}>La gala ya ha comenzado</h3>
-          <p style={{ color: 'var(--text-muted)', maxWidth: '440px', fontSize: '14px' }}>
+          <p style={{ color: 'var(--text-muted)', maxWidth: '440px', fontSize: '15px' }}>
             La votación se cerró al empezar la gala y tu voto no llegó a sellarse. Puedes seguir aquí arriba cómo va tu tapa.
           </p>
         </div>
       ) : (
-        /* Active Eurovision Voting Section */
+        /* Active voting: progress on top, ballot, main action fixed at the bottom */
         <>
-          <div className={styles.stickyHeader}>
-            <div className="flex items-center justify-between">
-              <span className="mono" style={{ fontSize: '12px', fontWeight: 600 }}>
-                ORDENA LAS TAPAS (DE {totalRivalsCount} A 1 PUNTOS)
+          <div className={styles.progressBar}>
+            <div className={styles.progressHead}>
+              <span className={styles.progressCount}>
+                {rankedIds.length}/{totalRivalsCount}
               </span>
-              <span className="mono" style={{ fontSize: '12px', color: isVoteComplete ? 'var(--pastel-green-text)' : 'var(--text-muted)' }}>
-                {rankedIds.length}/{totalRivalsCount} ordenadas
-              </span>
+              <span className={styles.progressHint}>{progressHint}</span>
             </div>
-            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-              Toca las tapas de tu favorita a la que menos te gustó. Después arrastra o usa las flechas para ajustar.
-            </span>
+            <div className={styles.progressSegments} aria-hidden="true">
+              {rivals.map((rival, i) => (
+                <span
+                  key={rival.id}
+                  className={`${styles.progressSegment} ${
+                    isVoteComplete ? styles.progressSegmentAllDone : i < rankedIds.length ? styles.progressSegmentDone : ''
+                  }`}
+                />
+              ))}
+            </div>
           </div>
 
           <RankingBallot
@@ -562,18 +578,16 @@ export function VotingView({
             onNoteChange={updateNote}
           />
 
-          <button
-            className="btn btn-primary"
-            style={{ width: '100%', padding: '14px', fontSize: '16px' }}
-            disabled={!isVoteComplete}
-            onClick={() => setIsConfirmOpen(true)}
-          >
-            {isVoteComplete
-              ? 'Sellar y Enviar mis Puntos'
-              : `Ordena todas las tapas (${rankedIds.length}/${totalRivalsCount})`}
-          </button>
+          <div className={styles.bottomBar}>
+            <button className="btn btn-primary" disabled={!isVoteComplete} onClick={() => setIsConfirmOpen(true)}>
+              {isVoteComplete ? 'Sellar mi voto' : `Te ${remaining === 1 ? 'falta' : 'faltan'} ${remaining} por ordenar`}
+            </button>
+          </div>
         </>
       )}
+
+      {/* While tasting and voting the own tapa sits below, folded */}
+      {(isTasting || isVotingOpen) && fichaCard}
 
       {/* Edit modal */}
       {isEditModalOpen && (
@@ -592,24 +606,22 @@ export function VotingView({
       {isConfirmOpen && (
         <ConfirmDialog
           title="¿Sellar tu voto?"
-          confirmLabel="Sellar y Enviar mis Puntos"
+          confirmLabel="Sellar y enviar"
           cancelLabel="Revisar otra vez"
           onConfirm={handleSubmitVote}
           onCancel={() => setIsConfirmOpen(false)}
         >
-          <p style={{ marginBottom: '12px' }}>
-            Este es tu reparto. Una vez sellado no podrás modificarlo.
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <p style={{ marginBottom: '12px' }}>Este es tu reparto. Una vez sellado no se puede cambiar.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
             {rankedIds
               .flatMap((id) => rivals.filter((r) => r.id === id))
               .map((rival) => (
-                <div key={rival.id} className="flex items-center justify-between" style={{ gap: '12px' }}>
-                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {rival.dishName || `Tapa de ${teamLabel(rival, members)}`}
+                <div key={rival.id} className={styles.companionRow} style={{ padding: '6px 4px' }}>
+                  <span className="mono" style={{ width: '28px', flexShrink: 0, fontWeight: 800, color: 'var(--text-primary)' }}>
+                    {assignedScores[rival.id]}
                   </span>
-                  <span className="mono" style={{ fontWeight: 700, flexShrink: 0 }}>
-                    {assignedScores[rival.id]} {assignedScores[rival.id] === 1 ? 'pt' : 'pts'}
+                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {rival.dishName || `Tapa de ${teamLabel(rival, members)}`}
                   </span>
                 </div>
               ))}

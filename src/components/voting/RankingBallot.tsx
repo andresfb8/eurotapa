@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { Member, Team } from '../../types/contest';
 import { teamLabel } from '../../utils/teams';
 import { PlusIcon } from '../Icons';
@@ -55,6 +55,9 @@ export function RankingBallot({
     .filter((r) => !ranking.includes(r.id))
     .sort((a, b) => a.tastingOrder - b.tastingOrder);
 
+  // Points the next tapped tapa would get
+  const nextPoints = maxPoints - ranked.length;
+
   const move = (from: number, to: number) => {
     if (to < 0 || to >= ranking.length || from === to) return;
     const next = [...ranking];
@@ -103,11 +106,33 @@ export function RankingBallot({
   };
 
   const handlePointerEnd = (commit: boolean) => {
-    if (commit && dragFrom !== -1) move(dragFrom, dragTarget);
+    if (commit && dragFrom !== -1 && dragTarget !== dragFrom) {
+      buzz();
+      move(dragFrom, dragTarget);
+    }
     setDrag(null);
   };
 
-  const renderFicha = (team: Team) => (
+  const buzz = () => {
+    try {
+      navigator.vibrate?.(12);
+    } catch {
+      // Vibration is a nicety, never required
+    }
+  };
+
+  const add = (teamId: string) => {
+    buzz();
+    setExpandedId(null);
+    onChange([...ranking, teamId]);
+  };
+
+  const remove = (teamId: string) => {
+    setExpandedId(null);
+    onChange(ranking.filter((id) => id !== teamId));
+  };
+
+  const renderFicha = (team: Team, action: React.ReactNode) => (
     <div className={styles.accordionContent}>
       {team.description && <p style={{ marginBottom: team.ingredients.length > 0 ? '8px' : 0 }}>{team.description}</p>}
       {team.ingredients.length > 0 && (
@@ -127,18 +152,14 @@ export function RankingBallot({
           />
         </label>
       )}
+      <div className={styles.fichaActions}>{action}</div>
     </div>
   );
 
   const renderNotePreview = (team: Team) =>
     notes?.[team.id]?.trim() ? <span className={styles.notePreview}>{notes[team.id]}</span> : null;
 
-  const renderThumb = (team: Team) =>
-    team.photoUrl ? (
-      <img src={team.photoUrl} alt="" className={styles.rankThumb} />
-    ) : (
-      <div className={`${styles.rankThumb} ${styles.rankThumbEmpty}`}>Sin foto</div>
-    );
+  const dishName = (team: Team) => team.dishName || `Tapa de ${teamLabel(team, members)}`;
 
   return (
     <>
@@ -161,9 +182,18 @@ export function RankingBallot({
           </div>
         ) : (
           ranked.map((team, index) => {
-            const points = maxPoints - previewIndex(index);
+            const place = previewIndex(index);
+            const points = maxPoints - place;
             const isDragging = drag?.id === team.id;
-            const shift = isDragging ? drag.dy : (previewIndex(index) - index) * dragStep;
+            const shift = isDragging ? drag.dy : (place - index) * dragStep;
+            const medalClass =
+              place === 0
+                ? styles.rankMedalGold
+                : place === 1
+                ? styles.rankMedalSilver
+                : place === 2
+                ? styles.rankMedalBronze
+                : '';
             return (
               <div
                 key={team.id}
@@ -179,56 +209,46 @@ export function RankingBallot({
                 }
               >
                 <div className={styles.rankRowMain}>
-                  <button
-                    type="button"
-                    className={styles.dragHandle}
-                    aria-label={`Arrastrar ${team.dishName || 'tapa'} para cambiar su puesto`}
-                    onPointerDown={(e) => handlePointerDown(e, team.id)}
-                    onPointerMove={handlePointerMove}
-                    onPointerUp={() => handlePointerEnd(true)}
-                    onPointerCancel={() => handlePointerEnd(false)}
-                  >
-                    <svg className="icon" viewBox="0 0 24 24">
-                      <line x1="4" y1="8" x2="20" y2="8" />
-                      <line x1="4" y1="12" x2="20" y2="12" />
-                      <line x1="4" y1="16" x2="20" y2="16" />
-                    </svg>
-                  </button>
-
-                  <span className={`${styles.rankPoints} ${previewIndex(index) === 0 ? styles.rankPointsTop : ''}`}>
-                    {positionsOnly ? `${previewIndex(index) + 1}º` : points}
-                    {!positionsOnly && <small>{points === 1 ? 'pt' : 'pts'}</small>}
-                  </span>
-
-                  {renderThumb(team)}
-
-                  <div className={styles.rankInfo}>
-                    <button
-                      type="button"
-                      className={styles.rankInfoButton}
-                      onClick={() => setExpandedId(expandedId === team.id ? null : team.id)}
-                      title="Ver ingredientes y detalles"
-                    >
-                      <span className={styles.rankDish}>{team.dishName || `Tapa de ${teamLabel(team, members)}`}</span>
-                      <span className={styles.rankTeam}>{teamLabel(team, members)}</span>
-                      {renderNotePreview(team)}
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.rankRemove}
-                      onClick={() => onChange(ranking.filter((id) => id !== team.id))}
-                    >
-                      Quitar
-                    </button>
+                  <div className={styles.rankThumbWrap}>
+                    {team.photoUrl ? (
+                      <img src={team.photoUrl} alt="" className={styles.rankThumb} />
+                    ) : (
+                      <div className={`${styles.rankThumb} ${styles.rankThumbEmpty}`}>Sin foto</div>
+                    )}
+                    <span className={`${styles.rankMedal} ${medalClass}`}>
+                      {positionsOnly ? `${place + 1}º` : points}
+                    </span>
                   </div>
 
-                  <div className={styles.rankActions}>
+                  <button
+                    type="button"
+                    className={styles.rankInfo}
+                    onClick={() => setExpandedId(expandedId === team.id ? null : team.id)}
+                    aria-expanded={expandedId === team.id}
+                    title="Ver ficha, nota y opciones"
+                  >
+                    <span className={styles.rankDish}>{dishName(team)}</span>
+                    <span className={styles.rankTeam}>
+                      {!positionsOnly && (
+                        <>
+                          <strong>
+                            {points} {points === 1 ? 'punto' : 'puntos'}
+                          </strong>{' '}
+                          ·{' '}
+                        </>
+                      )}
+                      {teamLabel(team, members)}
+                    </span>
+                    {renderNotePreview(team)}
+                  </button>
+
+                  <div className={styles.rankArrows}>
                     <button
                       type="button"
                       className={styles.rankArrow}
                       onClick={() => move(index, index - 1)}
                       disabled={index === 0}
-                      aria-label="Subir un puesto"
+                      aria-label={`Subir ${dishName(team)} un puesto`}
                     >
                       ▲
                     </button>
@@ -237,68 +257,104 @@ export function RankingBallot({
                       className={styles.rankArrow}
                       onClick={() => move(index, index + 1)}
                       disabled={index === ranked.length - 1}
-                      aria-label="Bajar un puesto"
+                      aria-label={`Bajar ${dishName(team)} un puesto`}
                     >
                       ▼
                     </button>
                   </div>
+
+                  <button
+                    type="button"
+                    className={styles.dragHandle}
+                    aria-label={`Arrastrar ${dishName(team)} para cambiar su puesto`}
+                    onPointerDown={(e) => handlePointerDown(e, team.id)}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={() => handlePointerEnd(true)}
+                    onPointerCancel={() => handlePointerEnd(false)}
+                  >
+                    <svg className="icon" viewBox="0 0 24 24">
+                      <line x1="5" y1="7" x2="19" y2="7" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                      <line x1="5" y1="17" x2="19" y2="17" />
+                    </svg>
+                  </button>
                 </div>
 
-                {expandedId === team.id && renderFicha(team)}
+                {expandedId === team.id &&
+                  renderFicha(
+                    team,
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => remove(team.id)}>
+                      Quitar del ranking
+                    </button>
+                  )}
               </div>
             );
           })
         )}
       </div>
 
-      {/* Tapas still to rank */}
+      {/* Tapas still to rank: tap a photo to add it */}
       {unranked.length > 0 && (
         <div className={styles.rankSection}>
           <div className={styles.rankSectionTitle}>
-            {positionsOnly ? (
-              'Probadas y sin colocar'
-            ) : (
-              <>
-                Por ordenar · toca la siguiente que más te gustó ({maxPoints - ranked.length}{' '}
-                {maxPoints - ranked.length === 1 ? 'punto' : 'puntos'})
-              </>
-            )}
+            {positionsOnly ? 'Probadas y sin colocar · toca para añadir' : 'Por ordenar · toca la que más te gustó'}
           </div>
 
-          {unranked.map((team) => (
-            <div key={team.id} className={`${styles.rankRow} ${styles.rankRowPending}`}>
-              <div className={styles.rankRowMain}>
-                {renderThumb(team)}
-
-                <div className={styles.rankInfo}>
+          <div className={styles.pendingGrid}>
+            {unranked.map((team) => (
+              <Fragment key={team.id}>
+                <div className={styles.pendingCard}>
                   <button
                     type="button"
-                    className={styles.rankInfoButton}
-                    onClick={() => setExpandedId(expandedId === team.id ? null : team.id)}
-                    title="Ver ingredientes y detalles"
+                    className={styles.pendingAdd}
+                    onClick={() => add(team.id)}
+                    aria-label={
+                      positionsOnly
+                        ? `Añadir ${dishName(team)} a mi ranking`
+                        : `Dar ${nextPoints} ${nextPoints === 1 ? 'punto' : 'puntos'} a ${dishName(team)}`
+                    }
                   >
-                    <span className={styles.rankDish}>{team.dishName || `Tapa de ${teamLabel(team, members)}`}</span>
-                    <span className={styles.rankTeam}>
-                      Tapa #{team.tastingOrder} · {teamLabel(team, members)}
+                    {team.photoUrl ? (
+                      <img src={team.photoUrl} alt="" className={styles.pendingPhoto} />
+                    ) : (
+                      <div className={`${styles.pendingPhoto} ${styles.pendingPhotoEmpty}`}>Sin foto</div>
+                    )}
+                    <span className={styles.pendingBody}>
+                      <span className={styles.rankDish}>{dishName(team)}</span>
+                      <span className={styles.rankTeam}>
+                        #{team.tastingOrder} · {teamLabel(team, members)}
+                      </span>
+                      {renderNotePreview(team)}
                     </span>
-                    {renderNotePreview(team)}
+                  </button>
+
+                  <span className={styles.pendingPoints}>{positionsOnly ? '+' : `+${nextPoints}`}</span>
+
+                  <button
+                    type="button"
+                    className={styles.pendingInfoBtn}
+                    onClick={() => setExpandedId(expandedId === team.id ? null : team.id)}
+                    aria-expanded={expandedId === team.id}
+                    aria-label={`Ver la ficha de ${dishName(team)}`}
+                  >
+                    <span>i</span>
                   </button>
                 </div>
 
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  style={{ flexShrink: 0 }}
-                  onClick={() => onChange([...ranking, team.id])}
-                >
-                  <PlusIcon />
-                  Añadir
-                </button>
-              </div>
-
-              {expandedId === team.id && renderFicha(team)}
-            </div>
-          ))}
+                {expandedId === team.id && (
+                  <div className={styles.pendingFicha}>
+                    {renderFicha(
+                      team,
+                      <button type="button" className="btn btn-primary btn-sm" onClick={() => add(team.id)}>
+                        <PlusIcon />
+                        {positionsOnly ? 'Añadir a mi ranking' : `Darle ${nextPoints} ${nextPoints === 1 ? 'punto' : 'puntos'}`}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </Fragment>
+            ))}
+          </div>
         </div>
       )}
     </>

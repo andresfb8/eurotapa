@@ -1,44 +1,70 @@
 :root {
-  /* Canvas & Surfaces */
-  --color-canvas: #F7F6F3;
-  --color-canvas-subtle: #FBFBFA;
+  /* Canvas & Surfaces: warm cream, like a paper tablecloth */
+  --color-canvas: #FFF4E3;
+  --color-canvas-subtle: #FFFAF1;
   --color-surface: #FFFFFF;
-  --color-surface-hover: #F9F9F8;
-  --color-surface-active: #F2F1ED;
+  --color-surface-hover: #FFF8EC;
+  --color-surface-active: #FCEBD0;
 
   /* Structural Borders */
-  --border-color: #EAEAEA;
-  --border-color-strong: #D6D6D4;
-  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-color: #EBDDC5;
+  --border-color-strong: #CDBB9C;
+  --border-subtle: rgba(30, 26, 43, 0.08);
 
   /* Typography Colors */
-  --text-primary: #111111;
-  --text-body: #2F3437;
-  --text-muted: #787774;
-  --text-subtle: #9B9A97;
+  --text-primary: #1E1A2B;
+  --text-body: #3A3548;
+  --text-muted: #746C85;
+  --text-subtle: #9F97B0;
   --text-inverse: #FFFFFF;
 
-  /* Semantic Pastels (Minimalist-UI Standard) */
-  --pastel-red-bg: #FDEBEC;
-  --pastel-red-text: #9F2F2D;
-  --pastel-blue-bg: #E1F3FE;
-  --pastel-blue-text: #1F6C9F;
-  --pastel-green-bg: #EDF3EC;
-  --pastel-green-text: #346538;
-  --pastel-yellow-bg: #FBF3DB;
-  --pastel-yellow-text: #956400;
+  /* Accents: tomato for actions, saffron for points and gold, olive for "done" */
+  --accent-tomato: #E8472B;
+  --accent-tomato-dark: #C2351C;
+  --accent-saffron: #FFB81F;
+  --accent-saffron-soft: #FFE08A;
+  --accent-olive: #5C8A3A;
+  --accent-burgundy: #B3261E;
 
-  /* Font Families */
-  --font-serif: 'Instrument Serif', 'Newsreader', Georgia, serif;
+  /* The colour of the main action and of what sits on top of it */
+  --accent: var(--accent-tomato);
+  --accent-hover: var(--accent-tomato-dark);
+  --on-accent: #FFFFFF;
+  --ink: #1E1A2B;
+
+  /* Semantic pastels */
+  --pastel-red-bg: #FFE1DC;
+  --pastel-red-text: #B3261E;
+  --pastel-blue-bg: #DCEEFF;
+  --pastel-blue-text: #1B5E9E;
+  --pastel-green-bg: #E2F4D6;
+  --pastel-green-text: #2F6B1F;
+  --pastel-yellow-bg: #FFEDB8;
+  --pastel-yellow-text: #8A5A00;
+
+  /* Medals */
+  --medal-gold: #FFB81F;
+  --medal-silver: #C9CCD6;
+  --medal-bronze: #E39A5B;
+
+  /* Font Families. --font-serif is kept as the name for headings and dish names. */
+  --font-display: 'Bricolage Grotesque', 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-serif: var(--font-display);
   --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
   --font-mono: 'Geist Mono', 'SF Mono', Menlo, monospace;
 
   /* Radii */
-  --radius-xs: 3px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
   --radius-pill: 9999px;
+
+  /* "Sticker" shadows: hard, offset, no blur */
+  --shadow-sticker: 0 3px 0 var(--ink);
+  --shadow-sticker-pressed: 0 1px 0 var(--ink);
+  --shadow-card: 0 2px 0 var(--border-color);
+  --shadow-float: 0 12px 32px rgba(30, 26, 43, 0.16);
 
   /* Spacing */
   --space-1: 4px;
@@ -51,8 +77,51 @@
   --space-10: 40px;
   --space-12: 48px;
 
+  /* Touch targets */
+  --tap: 48px;
+
   /* Transitions */
   --transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
   --transition-smooth: 300ms cubic-bezier(0.16, 1, 0.3, 1);
   --transition-rank: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Gala stage: the big screen is dark so photos and points glow across the room */
+[data-theme='tv'] {
+  --color-canvas: #171130;
+  --color-canvas-subtle: #1E1740;
+  --color-surface: #261D4D;
+  --color-surface-hover: #30265F;
+  --color-surface-active: #3A2F70;
+
+  --border-color: #3B3170;
+  --border-color-strong: #5A4EA0;
+  --border-subtle: rgba(255, 255, 255, 0.1);
+
+  --text-primary: #FFF7E8;
+  --text-body: #E7E0F7;
+  --text-muted: #B0A6D0;
+  --text-subtle: #8A80AE;
+  --text-inverse: #171130;
+
+  --accent: var(--accent-saffron);
+  --accent-hover: #FFC94D;
+  --on-accent: #1E1A2B;
+  --ink: #0B0719;
+
+  --pastel-red-bg: rgba(255, 110, 90, 0.2);
+  --pastel-red-text: #FFA596;
+  --pastel-blue-bg: rgba(110, 180, 255, 0.2);
+  --pastel-blue-text: #A9D2FF;
+  --pastel-green-bg: rgba(130, 210, 100, 0.2);
+  --pastel-green-text: #B2E893;
+  --pastel-yellow-bg: rgba(255, 184, 31, 0.2);
+  --pastel-yellow-text: #FFD166;
+
+  --shadow-card: none;
+  --shadow-float: 0 18px 50px rgba(0, 0, 0, 0.45);
+
+  background-color: var(--color-canvas);
+  color: var(--text-body);
 }

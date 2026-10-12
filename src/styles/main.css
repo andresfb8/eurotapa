@@ -12,25 +12,27 @@ html, body {
   background-color: var(--color-canvas);
   color: var(--text-body);
   font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 1.6;
+  font-size: 16px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
 }
 
 #root {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
 
 /* Typography Hierarchy */
 h1, h2, h3, .font-serif {
-  font-family: var(--font-serif);
+  font-family: var(--font-display);
   color: var(--text-primary);
-  font-weight: 400;
-  line-height: 1.15;
-  letter-spacing: -0.02em;
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.025em;
 }
 
 h1 {
@@ -43,6 +45,7 @@ h2 {
 
 h3 {
   font-size: 1.25rem;
+  font-weight: 700;
 }
 
 .mono {
@@ -50,68 +53,83 @@ h3 {
   letter-spacing: -0.02em;
 }
 
-/* Buttons */
+/* Buttons: chunky pills with a hard "sticker" shadow */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  padding: 10px 18px;
+  min-height: 44px;
+  padding: 10px 20px;
   font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 500;
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast),
+    background-color var(--transition-fast), border-color var(--transition-fast);
   text-decoration: none;
   background: transparent;
   color: var(--text-primary);
 }
 
-.btn:active {
-  transform: scale(0.98);
-}
-
 .btn-primary {
-  background-color: var(--text-primary);
-  color: var(--text-inverse);
-  border-color: var(--text-primary);
+  background-color: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--ink);
+  box-shadow: var(--shadow-sticker);
 }
 
 .btn-primary:hover {
-  background-color: #2F3437;
-  border-color: #2F3437;
+  background-color: var(--accent-hover);
+}
+
+.btn-primary:active {
+  transform: translateY(2px);
+  box-shadow: var(--shadow-sticker-pressed);
 }
 
 .btn-secondary {
   background-color: var(--color-surface);
-  border-color: var(--border-color);
+  border-color: var(--border-color-strong);
   color: var(--text-primary);
 }
 
 .btn-secondary:hover {
   background-color: var(--color-surface-hover);
-  border-color: var(--border-color-strong);
+  border-color: var(--text-primary);
+}
+
+.btn-secondary:active {
+  transform: translateY(1px);
 }
 
 .btn-sm {
-  padding: 6px 12px;
-  font-size: 12px;
+  min-height: 34px;
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+.btn-sm.btn-primary {
+  box-shadow: 0 2px 0 var(--ink);
 }
 
 .btn:disabled {
-  opacity: 0.4;
+  opacity: 0.45;
   cursor: not-allowed;
   transform: none;
+  box-shadow: none;
 }
 
 /* Card Structure */
 .card {
   background-color: var(--color-surface);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius-lg);
   padding: var(--space-6);
+  box-shadow: var(--shadow-card);
   transition: border-color var(--transition-fast);
 }
 
@@ -123,10 +141,10 @@ h3 {
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
+  gap: 5px;
+  padding: 4px 10px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border-radius: var(--radius-pill);
@@ -159,15 +177,15 @@ h3 {
   border: 1px solid var(--border-color);
 }
 
-/* Inputs */
+/* Inputs: 16px so phones do not zoom in when focusing */
 .input {
   width: 100%;
-  padding: 10px 14px;
+  padding: 11px 14px;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 16px;
   color: var(--text-primary);
   background-color: var(--color-surface);
-  border: 1px solid var(--border-color);
+  border: 2px solid var(--border-color);
   border-radius: var(--radius-sm);
   outline: none;
   transition: border-color var(--transition-fast);
@@ -198,11 +216,59 @@ h3 {
 .icon {
   width: 16px;
   height: 16px;
-  stroke-width: 1.75;
+  stroke-width: 2;
   stroke: currentColor;
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
   display: inline-block;
   vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* Confetti: pure CSS pieces, used for sealed votes, maximum scores and the champion */
+.confetti {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.confetti i {
+  position: absolute;
+  top: -12%;
+  width: 0.7em;
+  height: 1.1em;
+  border-radius: 2px;
+  opacity: 0;
+  animation: confettiFall 2600ms cubic-bezier(0.2, 0.6, 0.4, 1) forwards;
+}
+
+.confetti i:nth-child(4n + 1) { background-color: var(--accent-tomato); }
+.confetti i:nth-child(4n + 2) { background-color: var(--accent-saffron); }
+.confetti i:nth-child(4n + 3) { background-color: var(--accent-olive); }
+.confetti i:nth-child(4n) { background-color: #6FB6FF; border-radius: 50%; height: 0.7em; }
+
+@keyframes confettiFall {
+  0% { opacity: 0; transform: translate3d(0, 0, 0) rotate(0deg); }
+  10% { opacity: 1; }
+  100% { opacity: 0; transform: translate3d(var(--drift, 0), 115vh, 0) rotate(var(--spin, 540deg)); }
+}
+
+@keyframes popBounce {
+  0% { transform: scale(0.9); }
+  60% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+
+  .confetti {
+    display: none;
+  }
 }
