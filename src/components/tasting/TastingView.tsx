@@ -1,6 +1,7 @@
 import { Member, Team } from '../../types/contest';
 import { teamLabel } from '../../utils/teams';
-import styles from './TastingView.module.css';
+import { FullscreenButton } from '../tv/TVShell';
+import tv from '../tv/TVStage.module.css';
 
 interface TastingViewProps {
   teams: Team[];
@@ -37,91 +38,67 @@ export function TastingView({
   };
 
   if (!currentTeam) {
-    return <div>No hay tapas registradas para degustación.</div>;
+    return <div style={{ padding: '4cqh 4cqw' }}>No hay tapas registradas para degustación.</div>;
   }
 
   return (
-    <div className={styles.tastingWrapper}>
-      <div className={styles.navigationBar}>
-        <div className="flex items-center gap-3">
-          <span className="badge badge-blue">Fase 2: Degustación en Vivo</span>
-          <span className="mono" style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            Tapa {currentIndex + 1} de {sorted.length}
-          </span>
+    <div className={tv.screen}>
+      <div className={tv.split}>
+        <div className={tv.photoPane}>
+          {currentTeam.photoUrl ? (
+            <img key={currentTeam.id} src={currentTeam.photoUrl} alt="" className={tv.photoImg} />
+          ) : (
+            <div className={tv.photoEmpty}>Sin foto</div>
+          )}
         </div>
 
-        {canControl && (
-          <button className="btn btn-primary btn-sm" onClick={onProceedToVoting}>
-            Abrir Votación
-            <svg className="icon" viewBox="0 0 24 24">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </button>
-        )}
-      </div>
+        <div key={currentTeam.id} className={tv.infoPane}>
+          <div>
+            <span className={`${tv.pill} ${tv.pillLive}`}>En la mesa ahora</span>
+          </div>
 
-      <div className={styles.tastingCard}>
-        <div className={styles.imageContainer}>
-          {currentTeam.photoUrl ? (
-            <img
-              src={currentTeam.photoUrl}
-              alt={currentTeam.dishName}
-              className={styles.tapaHeroImage}
-            />
-          ) : (
-            <div className="flex items-center justify-center" style={{ height: '100%', color: 'var(--text-muted)' }}>
-              Sin fotografía
+          <div className={tv.turn}>
+            <small>TURNO</small>
+            {currentTeam.tastingOrder}
+            <small>de {sorted.length}</small>
+          </div>
+
+          <div className={tv.infoBody}>
+            <div className={tv.teamLine}>{teamLabel(currentTeam, members)}</div>
+            <h1 className={tv.bigTitle}>{currentTeam.dishName || `Tapa de ${teamLabel(currentTeam, members)}`}</h1>
+            {currentTeam.description && <p className={tv.lead}>{currentTeam.description}</p>}
+          </div>
+
+          <div className={tv.spacer} />
+
+          {currentTeam.ingredients.length > 0 && (
+            <div>
+              <div className={tv.kicker} style={{ marginBottom: '1.2cqh' }}>
+                Ingredientes
+              </div>
+              <div className={tv.chips}>
+                {currentTeam.ingredients.map((ing, i) => (
+                  <span key={i} className={tv.chip}>
+                    {ing}
+                  </span>
+                ))}
+              </div>
             </div>
           )}
-          <div className={styles.turnFloatingBadge}>
-            TURNO #{currentTeam.tastingOrder}
-          </div>
         </div>
+      </div>
 
-        <div className={styles.detailsContent}>
-          <div>
-            <div className={styles.authorHeadline}>
-              Equipo: <strong>{teamLabel(currentTeam, members)}</strong>
-            </div>
-            <h1 className={styles.dishHeading}>{currentTeam.dishName}</h1>
-
-            <p className={styles.descriptionParagraph}>
-              {currentTeam.description || 'Sin descripción detallada por el equipo.'}
-            </p>
-
-            {currentTeam.ingredients.length > 0 && (
-              <div className={styles.ingredientsSection}>
-                <div className={styles.ingredientsTitle}>Ingredientes Clave</div>
-                <div className={styles.ingredientChips}>
-                  {currentTeam.ingredients.map((ing, i) => (
-                    <span key={i} className={styles.ingredientChip}>
-                      {ing}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {canControl && (
-          <div className={styles.footerControls}>
-            <button
-              className="btn btn-secondary"
-              onClick={handlePrev}
-              disabled={currentIndex === 0}
-            >
+      {canControl && (
+        <div className={tv.controlBar}>
+          <div className={tv.controlGroup}>
+            <button className="btn btn-secondary btn-sm" onClick={handlePrev} disabled={currentIndex === 0}>
               <svg className="icon" viewBox="0 0 24 24">
                 <polyline points="15 18 9 12 15 6" />
               </svg>
               Tapa Anterior
             </button>
-
-            <span className="mono" style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-              #{currentTeam.tastingOrder} / {sorted.length}
-            </span>
-
             <button
-              className="btn btn-secondary"
+              className="btn btn-primary btn-sm"
               onClick={handleNext}
               disabled={currentIndex === sorted.length - 1}
             >
@@ -130,10 +107,17 @@ export function TastingView({
                 <polyline points="9 18 15 12 9 6" />
               </svg>
             </button>
+            <FullscreenButton />
           </div>
-          )}
+
+          <button className="btn btn-secondary btn-sm" onClick={onProceedToVoting}>
+            Abrir Votación
+            <svg className="icon" viewBox="0 0 24 24">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 }

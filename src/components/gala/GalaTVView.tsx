@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { CSSProperties, useMemo } from 'react';
 import { GalaMode, GalaState, Member, Team, VoteRecord, ContestPhase } from '../../types/contest';
 import { calculateScoreboard } from '../../utils/scoring';
 import { teamLabel } from '../../utils/teams';
@@ -6,6 +6,9 @@ import { buildJuryVotes } from '../../utils/juries';
 import { ScoreboardList } from './ScoreboardList';
 import { PodiumView } from './PodiumView';
 import { ArrowRightIcon, BoltIcon, CrownIcon } from '../Icons';
+import { Confetti } from '../Confetti';
+import { FullscreenButton } from '../tv/TVShell';
+import tv from '../tv/TVStage.module.css';
 import styles from './GalaTVView.module.css';
 
 interface GalaTVViewProps {
@@ -22,6 +25,9 @@ interface GalaTVViewProps {
   onRestart: () => void;
 }
 
+/** Above this many tapas the scoreboard splits in two columns so rows stay readable. */
+const SINGLE_COLUMN_MAX = 10;
+
 export function GalaTVView({
   teams,
   members,
@@ -34,8 +40,6 @@ export function GalaTVView({
   onUndoGalaStep,
   onRestart
 }: GalaTVViewProps) {
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
   // Juries: one per tapa, with the combined vote of the team members who have voted
   const votersList = useMemo(
     () => buildJuryVotes(teams, members, votes),
@@ -43,7 +47,6 @@ export function GalaTVView({
   );
 
   const currentVoter = votersList[gala.currentVoterIndex];
-  const currentVoteRecord = currentVoter;
   const currentVoterTeam = currentVoter
     ? teams.find((team) => team.id === currentVoter.teamId)
     : undefined;
@@ -56,23 +59,24 @@ export function GalaTVView({
     });
   }, [teams, members, votes, gala]);
 
-  // Sorted list of votes from current voter in ASCENDING order (1 pt, 2 pts, ..., max pts).
+  // Votes from the current jury in ASCENDING order (1 pt, 2 pts, ..., max pts).
   // This hook must run on every render, before the podium early return, so the hook order stays stable.
   const sortedAscendingScores = useMemo(() => {
-    if (!currentVoteRecord) return [];
-    return Object.entries(currentVoteRecord.scores)
+    if (!currentVoter) return [];
+    return Object.entries(currentVoter.scores)
       .map(([targetId, pts]) => {
         const target = teams.find((t) => t.id === targetId);
         return {
           targetId,
-          dishName: target?.dishName || 'Tapa',
+          dishName: target?.dishName || (target ? `Tapa de ${teamLabel(target, members)}` : 'Tapa'),
           teamName: target ? teamLabel(target, members) : 'Equipo',
+          photoUrl: target?.photoUrl,
           points: pts,
           isRevealed: gala.revealedTapaIds.includes(targetId)
         };
       })
       .sort((a, b) => a.points - b.points);
-  }, [currentVoteRecord, teams, members, gala.revealedTapaIds]);
+  }, [currentVoter, teams, members, gala.revealedTapaIds]);
 
   const maxPointValue = sortedAscendingScores.length > 0
     ? sortedAscendingScores[sortedAscendingScores.length - 1].points
@@ -91,30 +95,12 @@ export function GalaTVView({
   const nextBulkScores = bulkCount > 0 ? pendingScores.slice(0, bulkCount) : null;
   const nextPointToReveal = !nextBulkScores && pendingScores.length > 0 ? pendingScores[0] : undefined;
 
-  // List of points revealed so far, sorted descending for display
+  // Points revealed so far, highest first
   const revealedScores = sortedAscendingScores
     .filter((s) => s.isRevealed)
     .sort((a, b) => b.points - a.points);
 
-  // Summary of the last bulk reveal ("reparto rápido")
-  const batchSummary = useMemo(() => {
-    const batchIds = gala.lastBatchIds ?? [];
-    if (batchIds.length === 0 || !currentVoteRecord) return null;
-    const sum = batchIds.reduce((acc, id) => acc + (currentVoteRecord.scores[id] ?? 0), 0);
-    return { count: batchIds.length, sum };
-  }, [gala.lastBatchIds, currentVoteRecord]);
-
   const canUndo = (gala.history?.length ?? 0) > 0 || gala.currentVoterIndex > 0;
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen().catch(() => {});
-      setIsFullscreen(false);
-    }
-  };
 
   // If in PODIO phase, show grand podium
   if (phase === 'PODIO' || gala.currentVoterIndex >= votersList.length) {
@@ -126,53 +112,163 @@ export function GalaTVView({
     ? nextBulkScores.reduce((acc, score) => acc + score.points, 0)
     : 0;
 
+  // What the last click put on screen: a whole batch ("reparto rápido") or a single point
+  const batchIds = (gala.lastBatchIds ?? []).filter((id) => gala.revealedTapaIds.includes(id));
+  const lastBatch = batchIds.length > 1
+    ? revealedScores.filter((s) => batchIds.includes(s.targetId))
+    : null;
+  const lastSingle = !lastBatch && gala.lastAwardedTapaId
+    ? revealedScores.find((s) => s.targetId === gala.lastAwardedTapaId)
+    : undefined;
+  const isMaxMoment = !!lastSingle && lastSingle.points === maxPointValue;
+
+  const useTwoColumns = scoreboard.length > SINGLE_COLUMN_MAX;
+  const boardStyle = {
+    '--rows': useTwoColumns ? Math.ceil(scoreboard.length / 2) : scoreboard.length,
+    '--cols': useTwoColumns ? 2 : 1
+  } as CSSProperties;
+
   return (
-    <div className={styles.galaContainer}>
-      {/* Top Banner */}
-      <div className={styles.galaHeader}>
-        <div className="flex items-center gap-3">
-          <span className="badge badge-yellow">Modo TV — Gala Eurovisión</span>
-          <span className="mono" style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>
-            Jurado {gala.currentVoterIndex + 1} de {votersList.length}
+    <div className={styles.gala}>
+      <div className={styles.topStrip}>
+        <span className={`${tv.pill} ${tv.pillLive}`}>Gala en directo</span>
+
+        <div className={styles.juryCount}>
+          Jurado {gala.currentVoterIndex + 1} de {votersList.length}
+          <span className={styles.juryDots} aria-hidden="true">
+            {votersList.map((jury, index) => (
+              <span
+                key={jury.teamId}
+                className={`${styles.juryDot} ${
+                  index < gala.currentVoterIndex
+                    ? styles.juryDotDone
+                    : index === gala.currentVoterIndex
+                    ? styles.juryDotNow
+                    : ''
+                }`}
+              />
+            ))}
           </span>
         </div>
+      </div>
 
-        <div className="flex items-center gap-3">
-          {/* Undo last reveal */}
-          {canControl && (
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={onUndoGalaStep}
-            disabled={!canUndo}
-            title="Deshacer el último paso de la gala"
-          >
-            <svg className="icon" viewBox="0 0 24 24">
-              <polyline points="9 14 4 9 9 4" />
-              <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
-            </svg>
-            Deshacer
-          </button>
+      <div className={styles.body}>
+        {/* Live scoreboard */}
+        <div className={styles.scoreboardCol} style={boardStyle}>
+          <ScoreboardList
+            items={scoreboard}
+            lastAwardedTapaId={gala.lastAwardedTapaId}
+            lastAwardedPoints={gala.lastAwardedPoints}
+          />
+        </div>
+
+        {/* The jury on air */}
+        <div className={styles.spotlight}>
+          {currentVoter && (
+            <div className={styles.juryHeader}>
+              <div className={styles.voterAvatar} aria-hidden="true">
+                {currentVoter.name.slice(0, 2).toUpperCase()}
+              </div>
+              <div className={styles.juryText}>
+                <span className={tv.kicker}>Reparte sus puntos</span>
+                <h2 className={styles.voterNameHeading}>{currentVoter.name}</h2>
+                <div className={styles.juryMeta}>
+                  {currentVoterTeam?.dishName ? `Su tapa: ${currentVoterTeam.dishName}` : ''}
+                  {currentVoter.memberCount > 1 && (
+                    <>
+                      {' '}· Voto combinado
+                      {currentVoter.votedCount < currentVoter.memberCount &&
+                        ` (${currentVoter.votedCount} de ${currentVoter.memberCount} han votado)`}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
 
-          {/* Fullscreen toggle */}
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={toggleFullscreen}
-            title="Poner en pantalla completa"
-          >
-            <svg className="icon" viewBox="0 0 24 24">
-              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
-            </svg>
-            {isFullscreen ? 'Salir de Pantalla Completa' : 'Pantalla Completa'}
-          </button>
+          <div className={`${styles.hero} ${isMaxMoment ? styles.heroMax : ''}`}>
+            {isMaxMoment && <Confetti count={48} burstKey={`${gala.currentVoterIndex}-max`} />}
 
-          {/* Action button */}
-          {canControl && (
-          <button
-            className="btn btn-primary"
-            onClick={onNextGalaStep}
-            style={{ padding: '10px 22px', fontSize: '15px' }}
-          >
+            {lastSingle ? (
+              <>
+                {isMaxMoment && (
+                  <span className={tv.pill}>
+                    <CrownIcon />
+                    Máxima puntuación
+                  </span>
+                )}
+                <div key={`${gala.currentVoterIndex}-${lastSingle.targetId}`} className={styles.heroPoints}>
+                  +{lastSingle.points}
+                </div>
+                <div key={`t-${gala.currentVoterIndex}-${lastSingle.targetId}`} className={styles.heroTarget}>
+                  {lastSingle.photoUrl && <img src={lastSingle.photoUrl} alt="" className={styles.heroPhoto} />}
+                  <div style={{ minWidth: 0 }}>
+                    <div className={styles.heroDish}>{lastSingle.dishName}</div>
+                    <div className={styles.heroTeam}>{lastSingle.teamName}</div>
+                  </div>
+                </div>
+              </>
+            ) : lastBatch ? (
+              <>
+                <div className={styles.heroBatchTitle}>Reparto rápido</div>
+                <div className={styles.batchList}>
+                  {lastBatch.map((score, index) => (
+                    <div key={score.targetId} className={styles.batchRow} style={{ animationDelay: `${index * 70}ms` }}>
+                      <strong>+{score.points}</strong>
+                      <span>{score.dishName}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className={styles.heroWaiting}>
+                  {currentVoter ? `Conectamos con ${currentVoter.name}` : 'Preparando el siguiente jurado'}
+                </div>
+                <div className={styles.heroWaitingSub}>
+                  {sortedAscendingScores.length > 0
+                    ? `Reparte de ${maxPointValue} a 1 ${maxPointValue === 1 ? 'punto' : 'puntos'}`
+                    : ''}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className={styles.delivered}>
+            {revealedScores.length === 0 ? (
+              <span className={styles.deliveredEmpty}>Aún no ha entregado ningún punto.</span>
+            ) : (
+              revealedScores.map((score) => (
+                <span key={score.targetId} className={styles.deliveredChip}>
+                  <b>{score.points}</b>
+                  <span>{score.dishName}</span>
+                </span>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Organizer controls */}
+      {canControl && (
+        <div className={tv.controlBar}>
+          <div className={tv.controlGroup}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={onUndoGalaStep}
+              disabled={!canUndo}
+              title="Deshacer el último paso de la gala"
+            >
+              <svg className="icon" viewBox="0 0 24 24">
+                <polyline points="9 14 4 9 9 4" />
+                <path d="M20 20v-7a4 4 0 0 0-4-4H4" />
+              </svg>
+              Deshacer
+            </button>
+            <FullscreenButton />
+          </div>
+
+          <button className="btn btn-primary" onClick={onNextGalaStep}>
             {nextBulkScores ? (
               <>
                 <BoltIcon />
@@ -199,132 +295,8 @@ export function GalaTVView({
               </>
             )}
           </button>
-          )}
         </div>
-      </div>
-
-      <div className={styles.galaGrid}>
-        {/* Left Column: Live Scoreboard */}
-        <div className={styles.scoreboardCol}>
-          <div className={styles.scoreboardHeader}>
-            <span>Posición y Tapa</span>
-            <span>Puntos Totales</span>
-          </div>
-
-          <ScoreboardList
-            items={scoreboard}
-            lastAwardedTapaId={gala.lastAwardedTapaId}
-            lastAwardedPoints={gala.lastAwardedPoints}
-          />
-        </div>
-
-        {/* Right Column: Live Voter Spotlight on TV broadcast */}
-        <div className={styles.spotlightCol}>
-          <div className={styles.spotlightCard}>
-            <div className="badge badge-neutral" style={{ alignSelf: 'flex-start' }}>
-              En Conexión Directa
-            </div>
-
-            {currentVoter && (
-              <div className={styles.voterMetaArea}>
-                <div className={styles.voterAvatar}>
-                  {currentVoter.name.slice(0, 2).toUpperCase()}
-                </div>
-                <div>
-                  <h2 className={styles.voterNameHeading}>{currentVoter.name}</h2>
-                  <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    {currentVoterTeam ? (
-                      <>
-                        Su tapa: <em>{currentVoterTeam.dishName || 'Sin título'}</em>
-                        {currentVoter.memberCount > 1 && (
-                          <>
-                            {' '}· Voto combinado
-                            {currentVoter.votedCount < currentVoter.memberCount &&
-                              ` (${currentVoter.votedCount} de ${currentVoter.memberCount} han votado)`}
-                          </>
-                        )}
-                      </>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div>
-              <div
-                style={{
-                  fontSize: '12px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                  color: 'var(--text-subtle)',
-                  fontFamily: 'var(--font-mono)',
-                  marginBottom: '12px',
-                  display: 'flex',
-                  justifyContent: 'space-between'
-                }}
-              >
-                <span>Puntos Revelados</span>
-                <span>{revealedScores.length} de {sortedAscendingScores.length}</span>
-              </div>
-
-              {batchSummary && (
-                <div
-                  className="badge badge-blue"
-                  style={{ marginBottom: '10px', padding: '6px 10px', fontSize: '12px', textTransform: 'none' }}
-                >
-                  <BoltIcon /> Reparto rápido: {batchSummary.count} tapas · +{batchSummary.sum} puntos
-                </div>
-              )}
-
-              {revealedScores.length === 0 ? (
-                <div
-                  style={{
-                    textAlign: 'center',
-                    padding: '36px 20px',
-                    color: 'var(--text-muted)',
-                    fontSize: '15px',
-                    border: '1px dashed var(--border-color)',
-                    borderRadius: '6px'
-                  }}
-                >
-                  {canControl
-                    ? `Pulsa el botón superior para desvelar ${mode === 'DIRECTA' ? 'el voto completo' : 'el primer voto (+1 punto)'} de ${currentVoter?.name}...`
-                    : `A punto de conocer los votos de ${currentVoter?.name}...`}
-                </div>
-              ) : (
-                <div className={styles.revealedPointsList}>
-                  {revealedScores.map((score) => {
-                    const isMax = score.points === maxPointValue;
-                    const isLatest = gala.lastAwardedTapaId === score.targetId;
-
-                    return (
-                      <div
-                        key={score.targetId}
-                        className={`${styles.pointRow} ${
-                          isMax ? styles.pointRowMax : isLatest ? styles.pointRowTop3 : ''
-                        }`}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: '15px' }}>
-                            {score.dishName}
-                          </div>
-                          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                            Equipo: {score.teamName}
-                          </div>
-                        </div>
-
-                        <span className={styles.pointsPill}>
-                          +{score.points} pts
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

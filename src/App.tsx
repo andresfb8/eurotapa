@@ -8,6 +8,17 @@ import { VotingView } from './components/voting/VotingView';
 import { VotingTVView } from './components/voting/VotingTVView';
 import { GalaTVView } from './components/gala/GalaTVView';
 import { AdminPanel } from './components/admin/AdminPanel';
+import { TVShell, TVStage } from './components/tv/TVShell';
+import { ContestPhase } from './types/contest';
+
+const PHASE_LABELS: Record<ContestPhase, string> = {
+  CONFIGURACION: 'Preparación',
+  SORTEO: 'Sorteo',
+  DEGUSTACION: 'Degustación',
+  VOTACION: 'Votación',
+  GALA_TV: 'Gala',
+  PODIO: 'Podio'
+};
 
 export function App() {
   const {
@@ -123,7 +134,7 @@ export function App() {
     return (
       <div
         style={{
-          minHeight: '100vh',
+          minHeight: '100dvh',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -162,7 +173,7 @@ export function App() {
   // 2. If logged in as PARTICIPANT -> Exclusive Chef Portal (Cannot see other tabs or TV)
   if (session.role === 'participant') {
     return (
-      <main style={{ minHeight: '100vh', backgroundColor: 'var(--color-canvas)', padding: '20px 0' }}>
+      <main style={{ minHeight: '100dvh', backgroundColor: 'var(--color-canvas)', padding: '20px 0' }}>
         <VotingView
           teams={state.teams}
           members={state.members}
@@ -182,62 +193,45 @@ export function App() {
     );
   }
 
-  // 3. If logged in as TV -> Large Screen TV View (With discrete exit option)
+  // 3. If logged in as TV -> the stage takes the whole monitor; a thin strip appears with the mouse
   if (session.role === 'tv') {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-        <header
-          style={{
-            backgroundColor: 'var(--color-surface)',
-            borderBottom: '1px solid var(--border-color)',
-            padding: '8px var(--space-6)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '14px', fontWeight: 700 }}>{state.title}</span>
-            <span className="badge badge-neutral" style={{ fontSize: '11px' }}>
-              Fase: {state.phase}
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {contestsList.length > 1 && (
-              <select
-                className="input"
-                style={{ padding: '4px 8px', fontSize: '12px' }}
-                value={state.id}
-                onChange={(e) => switchContest(e.target.value)}
-              >
-                {contestsList.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.title}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={logout}
-              style={{ fontSize: '11px', padding: '4px 8px' }}
+      <TVShell
+        title={state.title}
+        phaseLabel={PHASE_LABELS[state.phase]}
+        onClose={logout}
+        extra={
+          contestsList.length > 1 && (
+            <select
+              className="input"
+              style={{ padding: '4px 8px', fontSize: '13px', width: 'auto' }}
+              value={state.id}
+              onChange={(e) => switchContest(e.target.value)}
             >
-              Cerrar TV
-            </button>
-          </div>
-        </header>
-
-        <main style={{ flex: 1 }}>{renderTVContent(false)}</main>
-      </div>
+              {contestsList.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.title}
+                </option>
+              ))}
+            </select>
+          )
+        }
+      >
+        {renderTVContent(false)}
+      </TVShell>
     );
   }
 
   // 4. If logged in as SUPERADMIN -> Full Multi-Contest Admin Console
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+    <div
+      data-tv-shell=""
+      style={
+        adminTab === 'tv'
+          ? { display: 'flex', flexDirection: 'column', height: '100dvh', overflow: 'hidden' }
+          : { display: 'flex', flexDirection: 'column', minHeight: '100dvh' }
+      }
+    >
       <Navigation
         role="superadmin"
         contestTitle={state.title}
@@ -247,7 +241,7 @@ export function App() {
         onLogout={logout}
       />
 
-      <main style={{ flex: 1 }}>
+      <main style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {adminTab === 'admin' ? (
           <AdminPanel
             state={state}
@@ -273,7 +267,7 @@ export function App() {
             onLogout={logout}
           />
         ) : (
-          renderTVContent(true)
+          <TVStage>{renderTVContent(true)}</TVStage>
         )}
       </main>
     </div>

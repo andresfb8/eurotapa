@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Member, Team } from '../../types/contest';
 import { teamLabel } from '../../utils/teams';
-import tastingStyles from '../tasting/TastingView.module.css';
-import styles from './VotingTVView.module.css';
+import { FullscreenButton } from '../tv/TVShell';
+import tv from '../tv/TVStage.module.css';
 
 interface VotingTVViewProps {
   teams: Team[];
@@ -35,92 +35,88 @@ export function VotingTVView({ teams, members, votedCount, totalVoters, canContr
   const currentIndex = sorted.length > 0 ? slideIndex % sorted.length : 0;
   const currentTeam = sorted[currentIndex];
   const allVoted = totalVoters > 0 && votedCount >= totalVoters;
+  const progress = totalVoters > 0 ? Math.min(100, Math.round((votedCount / totalVoters) * 100)) : 0;
 
   return (
-    <div className={tastingStyles.tastingWrapper}>
-      <div className={tastingStyles.navigationBar} style={{ flexWrap: 'wrap', gap: '12px' }}>
-        <div className="flex items-center gap-3" style={{ flexWrap: 'wrap' }}>
-          <span className="badge badge-green">Votación en Curso</span>
-          <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
-            Reparte tus puntos desde el móvil (de {Math.max(teams.length - 1, 0)} a 1)
-          </span>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div style={{ textAlign: 'right' }}>
-            <div className={styles.voteCounter}>
-              {votedCount} / {totalVoters}
+    <div className={tv.screen}>
+      <div className={tv.split}>
+        <div className={tv.photoPane}>
+          {currentTeam?.photoUrl ? (
+            <img key={currentTeam.id} src={currentTeam.photoUrl} alt="" className={tv.photoImg} />
+          ) : (
+            <div className={tv.photoEmpty}>Sin foto</div>
+          )}
+          {currentTeam && (
+            <div className={tv.photoBadge}>
+              <small>TAPA</small>
+              {currentTeam.tastingOrder}
             </div>
-            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              {allVoted ? 'Todos los votos recibidos' : 'votos sellados'}
-            </div>
-          </div>
-
-          {canControl && (
-            <button className="btn btn-primary" onClick={onStartGala} disabled={votedCount === 0}>
-              Comenzar la Gran Gala
-              <svg className="icon" viewBox="0 0 24 24">
-                <polyline points="9 18 15 12 9 6" />
-              </svg>
-            </button>
           )}
         </div>
-      </div>
 
-      {currentTeam && (
-        <div key={currentTeam.id} className={`${tastingStyles.tastingCard} ${styles.slide}`}>
-          <div className={tastingStyles.imageContainer}>
-            {currentTeam.photoUrl ? (
-              <img src={currentTeam.photoUrl} alt={currentTeam.dishName} className={tastingStyles.tapaHeroImage} />
-            ) : (
-              <div className="flex items-center justify-center" style={{ height: '100%', color: 'var(--text-muted)' }}>
-                Sin fotografía
-              </div>
-            )}
-            <div className={tastingStyles.turnFloatingBadge}>TAPA #{currentTeam.tastingOrder}</div>
+        <div className={tv.infoPane}>
+          <div>
+            <span className={`${tv.pill} ${tv.pillLive}`}>Votación en curso</span>
           </div>
 
-          <div className={tastingStyles.detailsContent}>
-            <div>
-              <div className={tastingStyles.authorHeadline}>
-                Equipo: <strong>{teamLabel(currentTeam, members)}</strong>
-              </div>
-              <h1 className={tastingStyles.dishHeading}>
-                {currentTeam.dishName || `Tapa de ${teamLabel(currentTeam, members)}`}
-              </h1>
+          <div className={tv.counterRow}>
+            <div className={tv.counter}>
+              {votedCount}
+              <small>/{totalVoters}</small>
+            </div>
+            <div className={tv.kicker} style={{ textAlign: 'right' }}>
+              {allVoted ? 'Todos han votado' : 'votos sellados'}
+              <br />
+              De {Math.max(teams.length - 1, 0)} a 1 puntos, desde el móvil
+            </div>
+          </div>
+          <div className={tv.meter}>
+            <div className={tv.meterFill} style={{ width: `${progress}%` }} />
+          </div>
 
-              {currentTeam.description && (
-                <p className={tastingStyles.descriptionParagraph}>{currentTeam.description}</p>
-              )}
-
+          {currentTeam && (
+            <div key={currentTeam.id} className={tv.infoBody}>
+              <div className={tv.teamLine}>{teamLabel(currentTeam, members)}</div>
+              <h1 className={tv.bigTitle}>{currentTeam.dishName || `Tapa de ${teamLabel(currentTeam, members)}`}</h1>
+              {currentTeam.description && <p className={tv.lead}>{currentTeam.description}</p>}
               {currentTeam.ingredients.length > 0 && (
-                <div className={tastingStyles.ingredientsSection}>
-                  <div className={tastingStyles.ingredientsTitle}>Ingredientes Clave</div>
-                  <div className={tastingStyles.ingredientChips}>
-                    {currentTeam.ingredients.map((ing, i) => (
-                      <span key={i} className={tastingStyles.ingredientChip}>
-                        {ing}
-                      </span>
-                    ))}
-                  </div>
+                <div className={tv.chips}>
+                  {currentTeam.ingredients.slice(0, 6).map((ing, i) => (
+                    <span key={i} className={tv.chip}>
+                      {ing}
+                    </span>
+                  ))}
                 </div>
               )}
             </div>
+          )}
 
-            <div>
-              <div className="mono" style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                Repaso de tapas · {currentIndex + 1} de {sorted.length}
+          <div className={tv.spacer} />
+
+          <div className={tv.thumbs} aria-hidden="true">
+            {sorted.map((team, i) => (
+              <div key={team.id} className={`${tv.thumb} ${i === currentIndex ? tv.thumbActive : ''}`}>
+                {team.photoUrl && <img src={team.photoUrl} alt="" />}
               </div>
-              <div className={styles.progressTrack}>
-                {sorted.map((team, i) => (
-                  <span
-                    key={team.id}
-                    className={`${styles.progressDot} ${i === currentIndex ? styles.progressDotActive : ''}`}
-                  />
-                ))}
-              </div>
-            </div>
+            ))}
           </div>
+        </div>
+      </div>
+
+      {canControl && (
+        <div className={tv.controlBar}>
+          <div className={tv.controlGroup}>
+            <FullscreenButton />
+            <span className={tv.controlHint}>
+              Al empezar la gala se cierra la votación: quien no haya sellado su voto se queda fuera.
+            </span>
+          </div>
+          <button className="btn btn-primary" onClick={onStartGala} disabled={votedCount === 0}>
+            Comenzar la Gran Gala
+            <svg className="icon" viewBox="0 0 24 24">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
         </div>
       )}
     </div>

@@ -1,161 +1,169 @@
-.drawContainer {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: var(--space-8) var(--space-6);
-}
-
-.headerArea {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  border-bottom: 1px solid var(--border-color);
-  padding-bottom: var(--space-6);
-}
-
-.actionsBar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  background-color: var(--color-surface);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: var(--space-4) var(--space-6);
-}
-
-.buttonGroup {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-
-.cardsGrid {
+/* Draw: a grid of turn cards that fills the screen. Stage units (cqw / cqh). */
+.draw {
+  height: 100%;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: var(--space-4);
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
-.drawCard {
-  background-color: var(--color-surface);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: var(--space-4) var(--space-5);
+.header {
   display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  transition: all var(--transition-fast);
-  position: relative;
-  user-select: none;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 3cqw;
+  padding: 3cqh 2.4cqw 0;
 }
 
-.drawCard:hover {
-  border-color: var(--border-color-strong);
-  background-color: var(--color-surface-hover);
-}
-
-.orderBadge {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-sm);
-  background-color: var(--color-canvas);
-  border: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-mono);
-  font-size: 16px;
-  font-weight: 700;
+.title {
+  margin-top: 1cqh;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(26px, 7.5cqh, 112px);
+  line-height: 1;
+  letter-spacing: -0.03em;
   color: var(--text-primary);
-  flex-shrink: 0;
 }
 
-.dishThumb {
-  width: 52px;
-  height: 52px;
-  border-radius: var(--radius-sm);
-  object-fit: cover;
-  border: 1px solid var(--border-subtle);
-  flex-shrink: 0;
+.lead {
+  max-width: 30cqw;
+  font-size: clamp(13px, 2.3cqh, 32px);
+  line-height: 1.35;
+  color: var(--text-muted);
+  text-align: right;
 }
 
-.cardContent {
-  flex: 1;
+.lead strong {
+  color: var(--accent-saffron);
+}
+
+.grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows, 2), minmax(0, 1fr));
+  gap: 1.6cqh 1.2cqw;
+  padding: 2.4cqh 2.4cqw 3cqh;
+}
+
+.card {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1cqh;
+  padding: 2cqh 1.4cqw;
+  background-color: var(--color-surface);
+  border: 2px solid var(--border-color);
+  border-radius: 2.6cqh;
+  overflow: hidden;
+  animation: cardIn 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes cardIn {
+  from { opacity: 0; transform: scale(0.86) rotate(-2deg); }
+  to { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+.number {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(40px, 17cqh, 260px);
+  line-height: 0.82;
+  letter-spacing: -0.05em;
+  color: var(--accent-saffron);
+  font-variant-numeric: tabular-nums;
+}
+
+.numberHidden {
+  color: var(--color-surface-active);
+}
+
+.cardBody {
   min-width: 0;
 }
 
-.dishName {
-  font-family: var(--font-serif);
-  font-size: 1.15rem;
+.names {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(16px, 4cqh, 60px);
+  line-height: 1.05;
   color: var(--text-primary);
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.authorMeta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: 13px;
+.meta {
+  margin-top: 0.8cqh;
+  font-size: clamp(11px, 2.1cqh, 30px);
   color: var(--text-muted);
-  margin-top: 2px;
 }
 
 .cardControls {
+  position: absolute;
+  top: 1.4cqh;
+  right: 1cqw;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .controlBtn {
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xs);
-  padding: 3px 6px;
+  width: 40px;
+  height: 34px;
+  background-color: var(--color-canvas-subtle);
+  border: 2px solid var(--border-color-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
   cursor: pointer;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
+  transition: background-color var(--transition-fast);
 }
 
 .controlBtn:hover {
-  background-color: var(--color-canvas);
-  color: var(--text-primary);
+  background-color: var(--color-surface-active);
+}
+
+.controlBtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .toast {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  background-color: var(--text-primary);
-  color: var(--text-inverse);
-  padding: 10px 18px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-family: var(--font-sans);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  position: absolute;
+  left: 50%;
+  bottom: 9cqh;
+  transform: translateX(-50%);
+  max-width: 80cqw;
+  background-color: var(--accent-saffron);
+  color: #1E1A2B;
+  padding: 12px 20px;
+  border-radius: var(--radius-pill);
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: var(--shadow-float);
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  z-index: 1000;
-  animation: slideUp 200ms ease;
+  z-index: 100;
 }
 
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@media (max-width: 640px) {
-  .actionsBar {
+@media (max-width: 760px) {
+  .header {
     flex-direction: column;
-    align-items: stretch;
+    align-items: flex-start;
   }
-  .cardsGrid {
-    grid-template-columns: 1fr;
+
+  .lead {
+    max-width: none;
+    text-align: left;
+  }
+
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: none;
+    grid-auto-rows: minmax(0, 1fr);
   }
 }

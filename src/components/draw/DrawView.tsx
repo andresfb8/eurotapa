@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { CSSProperties, useState } from 'react';
 import { Member, Team } from '../../types/contest';
 import { membersOfTeam, teamLabel } from '../../utils/teams';
 import { formatTastingScheduleForWhatsApp } from '../../utils/whatsappExport';
 import { formatDrawDate } from '../../utils/dates';
 import { runAnimatedDraw } from '../../utils/draw';
 import { ConfirmDialog } from '../ConfirmDialog';
+import { FullscreenButton } from '../tv/TVShell';
+import tv from '../tv/TVStage.module.css';
 import styles from './DrawView.module.css';
 
 interface DrawViewProps {
@@ -93,113 +95,49 @@ export function DrawView({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  // As square a grid as fits a wide screen: 8 tapas -> 4 x 2, 12 -> 4 x 3
+  const columns = Math.max(1, Math.ceil(Math.sqrt(sortedTeams.length * 1.8)));
+  const rows = Math.max(1, Math.ceil(sortedTeams.length / columns));
+  const gridStyle = { '--cols': columns, '--rows': rows } as CSSProperties;
+
   return (
-    <div className={styles.drawContainer}>
-      <div className={styles.headerArea}>
-        <div className="flex items-center justify-between">
-          {isDrawDone ? (
-            <span className="badge badge-green">
-              Orden oficial{drawDate ? ` · sorteado el ${drawDate}` : ''}
-            </span>
-          ) : (
-            <span className="badge badge-yellow">Sorteo pendiente</span>
-          )}
-          <span className="mono" style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            {teams.length} tapas · {members.length} participantes
+    <div className={styles.draw}>
+      <div className={styles.header}>
+        <div>
+          <span className={`${tv.pill} ${isDrawDone ? '' : tv.pillLive}`}>
+            {isDrawDone ? `Orden oficial${drawDate ? ` · sorteado el ${drawDate}` : ''}` : 'Sorteo pendiente'}
           </span>
+          <h1 className={styles.title}>{isDrawDone ? 'Orden de salida' : 'Sorteo del orden de salida'}</h1>
         </div>
-        <h1 style={{ marginTop: '8px' }}>{isDrawDone ? 'Orden de Salida' : 'Sorteo del Orden de Salida'}</h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '15px' }}>
+        <p className={styles.lead}>
           {isDrawDone
-            ? 'Cada equipo ya conoce su turno y puede pensar y ensayar su tapa con tiempo. '
-            : 'El sorteo se hace con antelación para que cada equipo sepa su turno y pueda pensar y ensayar su tapa. '}
-          Las recetas e ingredientes son <strong>100% secretas</strong> y se revelarán únicamente al servir cada tapa.
+            ? 'Cada equipo ya conoce su turno y puede pensar y ensayar su tapa con tiempo.'
+            : 'El sorteo se hace con antelación para que cada equipo sepa su turno y pueda ensayar su tapa.'}{' '}
+          Las tapas son <strong>secretas</strong> hasta que se sirven.
         </p>
       </div>
 
-      {canControl && (
-        <div className={styles.actionsBar}>
-          <div className={styles.buttonGroup}>
-            {isDrawDone ? (
-              <>
-                <button className="btn btn-primary" onClick={handleCopyWhatsApp}>
-                  <svg className="icon" viewBox="0 0 24 24">
-                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-                    <polyline points="16 6 12 2 8 6" />
-                    <line x1="12" y1="2" x2="12" y2="15" />
-                  </svg>
-                  Compartir Orden por WhatsApp
-                </button>
-
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => setIsRedrawConfirmOpen(true)}
-                  disabled={isShuffling}
-                >
-                  <svg className="icon" viewBox="0 0 24 24">
-                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-                  </svg>
-                  {isShuffling ? 'Sorteando turnos...' : 'Repetir Sorteo'}
-                </button>
-              </>
-            ) : (
-              <>
-                <button className="btn btn-primary" onClick={handleShuffleLottery} disabled={isShuffling}>
-                  <svg className="icon" viewBox="0 0 24 24">
-                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-                  </svg>
-                  {isShuffling ? 'Sorteando turnos...' : 'Realizar Sorteo Aleatorio'}
-                </button>
-
-                <button className="btn btn-secondary" onClick={handleConfirmCurrentOrder} disabled={isShuffling}>
-                  Fijar este orden sin sortear
-                </button>
-              </>
-            )}
-          </div>
-
-          <button className="btn btn-secondary" onClick={onProceedToTasting}>
-            Día del concurso: Comenzar Degustación
-            <svg className="icon" viewBox="0 0 24 24">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {canControl && (
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: 'calc(-1 * var(--space-3))' }}>
-          {isDrawDone
-            ? 'Si surge un imprevisto, mueve un equipo con las flechas: el cambio llega al momento a los móviles y las horas se quedan en su turno.'
-            : 'También puedes ordenar los equipos a mano con las flechas y fijar ese orden sin sortear.'}
-        </p>
-      )}
-
-      {/* Grid showing ONLY team members and turn numbers (NO dish names, NO photos) */}
-      <div className={styles.cardsGrid}>
+      {/* Only team members and turn numbers: no dish names, no photos */}
+      <div className={styles.grid} style={gridStyle}>
         {sortedTeams.map((team, index) => {
           const teamMembers = membersOfTeam(team.id, members);
+          const showNumber = showTurns || isShuffling;
           return (
-            <div key={team.id} className={styles.drawCard}>
-              <div className={styles.orderBadge}>
-                {showTurns || isShuffling ? `#${index + 1}` : '?'}
+            // The key changes with the position, so a card that moves replays its entrance
+            <div key={`${team.id}-${index}`} className={styles.card} style={{ animationDelay: `${index * 45}ms` }}>
+              <div className={`${styles.number} ${showNumber ? '' : styles.numberHidden}`}>
+                {showNumber ? index + 1 : '?'}
               </div>
 
-              <div className={styles.cardContent}>
-                <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.4rem', color: 'var(--text-primary)' }}>
-                  {teamLabel(team, members)}
-                </div>
-                <div className={styles.authorMeta}>
-                  <span>
-                    {!isDrawDone
-                      ? teamMembers.length === 1
-                        ? 'Turno por sortear'
-                        : `Equipo de ${teamMembers.length} · Turno por sortear`
-                      : teamMembers.length === 1
-                      ? 'Turno de cocina'
-                      : `Equipo de ${teamMembers.length} · Turno de cocina`}
-                  </span>
-                  {isDrawDone && team.tastingTime && <span>• {team.tastingTime} h</span>}
+              <div className={styles.cardBody}>
+                <div className={styles.names}>{teamLabel(team, members)}</div>
+                <div className={styles.meta}>
+                  {!isDrawDone
+                    ? 'Turno por sortear'
+                    : teamMembers.length === 1
+                    ? 'Turno de cocina'
+                    : `Equipo de ${teamMembers.length}`}
+                  {isDrawDone && team.tastingTime && ` · ${team.tastingTime} h`}
                 </div>
               </div>
 
@@ -210,6 +148,7 @@ export function DrawView({
                     onClick={() => moveItem(index, 'up')}
                     disabled={index === 0 || isShuffling}
                     title="Adelantar turno"
+                    aria-label={`Adelantar el turno de ${teamLabel(team, members)}`}
                   >
                     ▲
                   </button>
@@ -218,6 +157,7 @@ export function DrawView({
                     onClick={() => moveItem(index, 'down')}
                     disabled={index === sortedTeams.length - 1 || isShuffling}
                     title="Retrasar turno"
+                    aria-label={`Retrasar el turno de ${teamLabel(team, members)}`}
                   >
                     ▼
                   </button>
@@ -227,6 +167,56 @@ export function DrawView({
           );
         })}
       </div>
+
+      {canControl && (
+        <div className={tv.controlBar}>
+          <div className={tv.controlGroup}>
+            {isDrawDone ? (
+              <>
+                <button className="btn btn-primary btn-sm" onClick={handleCopyWhatsApp}>
+                  <svg className="icon" viewBox="0 0 24 24">
+                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                    <polyline points="16 6 12 2 8 6" />
+                    <line x1="12" y1="2" x2="12" y2="15" />
+                  </svg>
+                  Compartir Orden por WhatsApp
+                </button>
+
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setIsRedrawConfirmOpen(true)}
+                  disabled={isShuffling}
+                >
+                  {isShuffling ? 'Sorteando turnos...' : 'Repetir Sorteo'}
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="btn btn-primary btn-sm" onClick={handleShuffleLottery} disabled={isShuffling}>
+                  {isShuffling ? 'Sorteando turnos...' : 'Realizar Sorteo Aleatorio'}
+                </button>
+
+                <button className="btn btn-secondary btn-sm" onClick={handleConfirmCurrentOrder} disabled={isShuffling}>
+                  Fijar este orden sin sortear
+                </button>
+              </>
+            )}
+            <FullscreenButton />
+            <span className={tv.controlHint}>
+              {isDrawDone
+                ? 'Imprevisto: mueve un equipo con sus flechas; el cambio llega a los móviles.'
+                : 'También puedes ordenar a mano con las flechas y fijar ese orden.'}
+            </span>
+          </div>
+
+          <button className="btn btn-secondary btn-sm" onClick={onProceedToTasting}>
+            Día del concurso: Comenzar Degustación
+            <svg className="icon" viewBox="0 0 24 24">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {isRedrawConfirmOpen && (
         <ConfirmDialog

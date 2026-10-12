@@ -5,6 +5,8 @@ interface ScoreboardBarProps {
   item: ScoreboardItem;
   isPulsing: boolean;
   lastAwardedPoints?: number;
+  /** Points of the current leader: the bar behind the row is drawn relative to it. */
+  leaderPoints: number;
   /** Positions gained since the previous reveal (positive = climbed, negative = dropped). */
   rankDelta?: number;
   /** Identifies the reorder this delta belongs to, so the indicator restarts on every movement. */
@@ -15,12 +17,14 @@ export function ScoreboardBar({
   item,
   isPulsing,
   lastAwardedPoints,
+  leaderPoints,
   rankDelta,
   motionId
 }: ScoreboardBarProps) {
-  const isTop1 = item.rank === 1;
-  const isTop2 = item.rank === 2;
-  const isTop3 = item.rank === 3;
+  const hasPoints = item.totalPoints > 0;
+  const isTop1 = hasPoints && item.rank === 1;
+  const isTop2 = hasPoints && item.rank === 2;
+  const isTop3 = hasPoints && item.rank === 3;
   const hasMoved = !!rankDelta;
 
   const rankBadgeClass = isTop1
@@ -31,52 +35,41 @@ export function ScoreboardBar({
     ? styles.rankBadgeTop3
     : styles.rankBadgeDefault;
 
+  const fill = leaderPoints > 0 ? Math.round((item.totalPoints / leaderPoints) * 100) : 0;
+
   return (
     <div
       className={`${styles.tvScoreRow} ${isPulsing ? styles.tvScoreRowPulsing : ''} ${
         isTop1 ? styles.tvScoreRowLeader : ''
       }`}
     >
+      <div className={styles.rowFill} style={{ width: `${fill}%` }} aria-hidden="true" />
+
       {/* Rank indicator */}
-      <div className={`${styles.tvRankBadge} ${rankBadgeClass}`}>
-        {isTop1 ? '1º' : isTop2 ? '2º' : isTop3 ? '3º' : `${item.rank}º`}
-      </div>
+      <div className={`${styles.tvRankBadge} ${rankBadgeClass}`}>{item.rank}º</div>
 
       {/* Dish Photo */}
       {item.photoUrl ? (
-        <img src={item.photoUrl} alt={item.dishName} className={styles.tvDishThumb} />
+        <img src={item.photoUrl} alt="" className={styles.tvDishThumb} />
       ) : (
-        <div className={styles.tvDishThumbPlaceholder}>
-          <svg className="icon" viewBox="0 0 24 24" style={{ width: '20px', height: '20px' }}>
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 8v8M8 12h8" />
-          </svg>
-        </div>
+        <div className={styles.tvDishThumbPlaceholder} />
       )}
 
       {/* Dish & Chef Info */}
       <div className={styles.tvDishInfo}>
-        <div className={styles.tvDishTitle}>{item.dishName}</div>
-        <div className={styles.tvChefName}>
-          Equipo: <strong>{item.name}</strong>
-        </div>
+        <div className={styles.tvDishTitle}>{item.dishName || `Tapa de ${item.name}`}</div>
+        <div className={styles.tvChefName}>{item.name}</div>
       </div>
 
       {/* Awarded points flash indicator */}
-      {isPulsing && lastAwardedPoints && (
-        <div className={styles.tvAwardFlash}>
-          +{lastAwardedPoints}
-        </div>
-      )}
+      {isPulsing && lastAwardedPoints && <div className={styles.tvAwardFlash}>+{lastAwardedPoints}</div>}
 
-      {/* Prominent Score Box (Optimized for 27" monitor reading) */}
+      {/* Score, readable from across the room */}
       <div className={styles.tvScoreBox}>
         {hasMoved && rankDelta !== undefined && (
           <span
             key={`${motionId}-${rankDelta}`}
-            className={`${styles.tvRankDelta} ${
-              rankDelta > 0 ? styles.tvRankDeltaUp : styles.tvRankDeltaDown
-            }`}
+            className={`${styles.tvRankDelta} ${rankDelta > 0 ? styles.tvRankDeltaUp : styles.tvRankDeltaDown}`}
             role="img"
             aria-label={
               rankDelta > 0
