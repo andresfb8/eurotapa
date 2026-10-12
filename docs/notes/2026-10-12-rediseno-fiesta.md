@@ -8,7 +8,8 @@
 
 - **Base** (`src/styles/tokens.css`, `main.css`, `index.html`): paleta crema / tomate / azafrán /
   oliva, titulares en Bricolage Grotesque, botones píldora con sombra dura, tarjetas con borde de
-  2px. Tema oscuro para la TV bajo `[data-theme="tv"]`. Se quita `user-scalable=no` del viewport.
+  2px. Tema de TV bajo `[data-theme="tv"]`: negro de plató con acentos naranja y rojo (estilo
+  concurso de cocina), sin morados. Se quita `user-scalable=no` del viewport.
 - **Móvil, votación** (`voting/VotingView.tsx`, `RankingBallot.tsx`, `ConfirmDialog.tsx`):
   - Cabecera de una línea; la ficha propia se pliega durante cata y votación.
   - Progreso fijo arriba ("4/7" + barra segmentada) y botón de sellar fijo abajo.

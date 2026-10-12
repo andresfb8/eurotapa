@@ -138,7 +138,7 @@
   transform: translateX(-50%);
   max-width: 80cqw;
   background-color: var(--accent-saffron);
-  color: #1E1A2B;
+  color: var(--on-accent);
   padding: 12px 20px;
   border-radius: var(--radius-pill);
   font-size: 15px;

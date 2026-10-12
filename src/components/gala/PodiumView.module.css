@@ -114,9 +114,9 @@
 
 .blockFirst {
   height: 40cqh;
-  background: linear-gradient(180deg, var(--accent-saffron) 0%, #E89A00 100%);
-  border-color: #0B0719;
-  color: #1E1A2B;
+  background: linear-gradient(180deg, #FFB347 0%, var(--accent-saffron) 45%, #E2470F 100%);
+  border-color: var(--ink);
+  color: var(--on-accent);
 }
 
 .blockSecond { height: 30cqh; }
@@ -132,7 +132,7 @@
 
 .blockFirst .place,
 .blockFirst .points {
-  color: #1E1A2B;
+  color: var(--on-accent);
 }
 
 .points {

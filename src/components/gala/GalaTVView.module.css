@@ -37,7 +37,7 @@
 }
 
 .juryDotDone { background-color: var(--accent-saffron); }
-.juryDotNow { background-color: var(--accent-tomato); box-shadow: 0 0 0 0.4cqh rgba(232, 71, 43, 0.35); }
+.juryDotNow { background-color: var(--accent-tomato); box-shadow: 0 0 0 0.4cqh color-mix(in srgb, var(--accent-tomato) 35%, transparent); }
 
 .body {
   min-height: 0;
@@ -87,8 +87,8 @@
 .rowFill {
   position: absolute;
   inset: 0 auto 0 0;
-  background: linear-gradient(90deg, rgba(255, 184, 31, 0.08) 0%, rgba(255, 184, 31, 0.3) 100%);
-  border-right: 2px solid rgba(255, 184, 31, 0.5);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent-saffron) 8%, transparent) 0%, color-mix(in srgb, var(--accent-saffron) 30%, transparent) 100%);
+  border-right: 2px solid color-mix(in srgb, var(--accent-saffron) 50%, transparent);
   transition: width 700ms cubic-bezier(0.16, 1, 0.3, 1);
   pointer-events: none;
 }
@@ -102,13 +102,13 @@
 }
 
 .tvScoreRowLeader .rowFill {
-  background: linear-gradient(90deg, rgba(255, 184, 31, 0.16) 0%, rgba(255, 184, 31, 0.45) 100%);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent-saffron) 16%, transparent) 0%, color-mix(in srgb, var(--accent-saffron) 45%, transparent) 100%);
 }
 
 .tvScoreRowPulsing {
   border-color: var(--accent-tomato);
   background-color: var(--color-surface-active);
-  box-shadow: 0 0 0 0.5cqh rgba(232, 71, 43, 0.35);
+  box-shadow: 0 0 0 0.5cqh color-mix(in srgb, var(--accent-tomato) 35%, transparent);
   z-index: 10;
 }
 
@@ -296,8 +296,8 @@
   height: 11cqh;
   border-radius: 50%;
   background-color: var(--accent-saffron);
-  border: 0.5cqh solid #0B0719;
-  color: #1E1A2B;
+  border: 0.5cqh solid var(--ink);
+  color: var(--on-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -352,7 +352,7 @@
 }
 
 .heroMax {
-  background: radial-gradient(circle at 50% 40%, rgba(255, 184, 31, 0.42) 0%, rgba(255, 184, 31, 0.08) 70%);
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--accent-saffron) 42%, transparent) 0%, color-mix(in srgb, var(--accent-saffron) 8%, transparent) 70%);
   box-shadow: inset 0 0 0 0.5cqh var(--accent-saffron);
 }
 
@@ -502,7 +502,7 @@
   padding: 0.1em 0.35em;
   border-radius: var(--radius-pill);
   background-color: var(--accent-saffron);
-  color: #1E1A2B;
+  color: var(--on-accent);
   font-family: var(--font-display);
   font-weight: 800;
   text-align: center;

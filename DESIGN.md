@@ -25,12 +25,13 @@
 Una cena entre amigos, no una revista: color, tipografía con carácter y botones que apetece pulsar.
 
 * **Paleta** (`src/styles/tokens.css`):
-  * Lienzo crema cálido `#FFF4E3`, superficies blancas, tinta berenjena `#1E1A2B`.
+  * Lienzo crema cálido `#FFF4E3`, superficies blancas, tinta carbón neutra `#161514`.
   * Acentos saturados: **tomate** `#E8472B` (acción principal), **azafrán** `#FFB81F` (puntos,
     líder, oro) y **oliva** `#5C8A3A` (confirmado).
   * Pasteles semánticos más vivos para avisos y estados.
-* **Tema TV** (`[data-theme="tv"]`): escenario oscuro berenjena con el azafrán como color de los
-  puntos, para que fotos y cifras destaquen desde el otro lado del salón.
+* **Tema TV** (`[data-theme="tv"]`), estilo plató de concurso de cocina: fondo negro, grises acero
+  y una "llama" que va del naranja `#FF7A1A` (puntos y destacados) al rojo `#E3261C` (directo y
+  momentos calientes). Sin morados. El color lo ponen las fotos y las cifras.
 * **Tipografía**: titulares, nombres de plato y cifras grandes en `Bricolage Grotesque` (700–800);
   cuerpo en `Geist`; etiquetas y contadores pequeños en `Geist Mono`.
 * **Forma**: radios de 10–22px, botones píldora con sombra dura desplazada ("pegatina"), bordes de

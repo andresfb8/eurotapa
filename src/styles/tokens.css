@@ -9,13 +9,13 @@
   /* Structural Borders */
   --border-color: #EBDDC5;
   --border-color-strong: #CDBB9C;
-  --border-subtle: rgba(30, 26, 43, 0.08);
+  --border-subtle: rgba(18, 18, 18, 0.08);
 
   /* Typography Colors */
-  --text-primary: #1E1A2B;
-  --text-body: #3A3548;
-  --text-muted: #746C85;
-  --text-subtle: #9F97B0;
+  --text-primary: #161514;
+  --text-body: #34312E;
+  --text-muted: #6E6862;
+  --text-subtle: #9C958E;
   --text-inverse: #FFFFFF;
 
   /* Accents: tomato for actions, saffron for points and gold, olive for "done" */
@@ -30,7 +30,7 @@
   --accent: var(--accent-tomato);
   --accent-hover: var(--accent-tomato-dark);
   --on-accent: #FFFFFF;
-  --ink: #1E1A2B;
+  --ink: #161514;
 
   /* Semantic pastels */
   --pastel-red-bg: #FFE1DC;
@@ -64,7 +64,7 @@
   --shadow-sticker: 0 3px 0 var(--ink);
   --shadow-sticker-pressed: 0 1px 0 var(--ink);
   --shadow-card: 0 2px 0 var(--border-color);
-  --shadow-float: 0 12px 32px rgba(30, 26, 43, 0.16);
+  --shadow-float: 0 12px 32px rgba(18, 18, 18, 0.16);
 
   /* Spacing */
   --space-1: 4px;
@@ -87,40 +87,52 @@
   --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* Gala stage: the big screen is dark so photos and points glow across the room */
+/*
+ * TV stage, cooking-show style: black studio, steel greys, and a flame that goes from amber to
+ * red. No purple anywhere. Photos and points are what carry the colour.
+ */
 [data-theme='tv'] {
-  --color-canvas: #171130;
-  --color-canvas-subtle: #1E1740;
-  --color-surface: #261D4D;
-  --color-surface-hover: #30265F;
-  --color-surface-active: #3A2F70;
+  --color-canvas: #0B0B0C;
+  --color-canvas-subtle: #141415;
+  --color-surface: #1B1B1D;
+  --color-surface-hover: #242427;
+  --color-surface-active: #2E2E32;
 
-  --border-color: #3B3170;
-  --border-color-strong: #5A4EA0;
+  --border-color: #2F2F33;
+  --border-color-strong: #4A4A50;
   --border-subtle: rgba(255, 255, 255, 0.1);
 
-  --text-primary: #FFF7E8;
-  --text-body: #E7E0F7;
-  --text-muted: #B0A6D0;
-  --text-subtle: #8A80AE;
-  --text-inverse: #171130;
+  --text-primary: #FFFFFF;
+  --text-body: #E9E7E4;
+  --text-muted: #A9A6A1;
+  --text-subtle: #7C7975;
+  --text-inverse: #0B0B0C;
+
+  /* The flame: orange for points and highlights, red for "on air" and the hottest moments */
+  --accent-saffron: #FF7A1A;
+  --accent-saffron-soft: #FFB36B;
+  --accent-tomato: #E3261C;
 
   --accent: var(--accent-saffron);
-  --accent-hover: #FFC94D;
-  --on-accent: #1E1A2B;
-  --ink: #0B0719;
+  --accent-hover: #FF9240;
+  --on-accent: #111111;
+  --ink: #000000;
 
-  --pastel-red-bg: rgba(255, 110, 90, 0.2);
-  --pastel-red-text: #FFA596;
-  --pastel-blue-bg: rgba(110, 180, 255, 0.2);
-  --pastel-blue-text: #A9D2FF;
-  --pastel-green-bg: rgba(130, 210, 100, 0.2);
-  --pastel-green-text: #B2E893;
-  --pastel-yellow-bg: rgba(255, 184, 31, 0.2);
-  --pastel-yellow-text: #FFD166;
+  --pastel-red-bg: rgba(227, 38, 28, 0.22);
+  --pastel-red-text: #FF8F86;
+  --pastel-blue-bg: rgba(255, 255, 255, 0.1);
+  --pastel-blue-text: #E9E7E4;
+  --pastel-green-bg: rgba(120, 200, 90, 0.2);
+  --pastel-green-text: #A9E28C;
+  --pastel-yellow-bg: rgba(255, 122, 26, 0.2);
+  --pastel-yellow-text: #FFB36B;
+
+  --medal-gold: #FFB21E;
+  --medal-silver: #D4D6DB;
+  --medal-bronze: #D98A4E;
 
   --shadow-card: none;
-  --shadow-float: 0 18px 50px rgba(0, 0, 0, 0.45);
+  --shadow-float: 0 18px 50px rgba(0, 0, 0, 0.6);
 
   background-color: var(--color-canvas);
   color: var(--text-body);
