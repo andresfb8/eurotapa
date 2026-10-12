@@ -92,6 +92,8 @@ export interface ContestState {
    */
   drawDoneAt?: string;
   activeTastingId?: string; // Team id shown in degustación mode
+  /** Highest turn served so far in the tasting: phones only show tapas up to this turn. */
+  tastingServedUpTo?: number;
   gala: GalaState;
   galaMode?: GalaMode; // Defaults to CLASICA when missing (legacy contests)
   createdAt?: string;

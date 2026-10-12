@@ -82,6 +82,21 @@ y los jurados anteriores a `currentVoterIndex`):
 - **Podio:** puesto final, "mayor fan", puntos recibidos de cada jurado, el voto que emitió
   su equipo, clasificación final y botón para copiar su resultado para WhatsApp.
 
+## 5c. Notas y ranking durante la cata (`TastingCompanion.tsx`)
+
+En `DEGUSTACION` el móvil muestra la tapa que está en la mesa (la misma que la TV), un
+campo de nota privada y el botón "Añadir a mi ranking". Debajo, el ranking provisional con
+las tapas ya servidas (`RankingBallot` en modo `positionsOnly`: puestos en vez de puntos).
+
+- Es el mismo borrador que usa la votación, así que al abrirse el voto llega ya ordenado.
+- Las notas (`eurotapa_tasting_notes_<memberId>`) y el ranking viven solo en `localStorage`;
+  no se sincronizan ni las ve nadie más. Se muestran también en la votación.
+- Las tapas que aún no se han servido siguen ocultas: `ContestState.tastingServedUpTo`
+  guarda el turno más alto servido (lo actualiza `setActiveTasting`, lo reinicia el paso de
+  sorteo a degustación y "Reiniciar concurso").
+- Al pasar de sorteo a degustación la TV empieza siempre por el turno 1 del orden oficial
+  (antes arrancaba en el primer equipo de la lista, fuese cual fuese su turno).
+
 ## 6. Modo de pruebas (sandbox)
 
 `npm run dev:sandbox` (puerto 5174, modo Vite `sandbox`, `.env.sandbox`) arranca la app con

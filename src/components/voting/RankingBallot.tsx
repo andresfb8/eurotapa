@@ -21,13 +21,29 @@ interface RankingBallotProps {
   /** Rival team ids from favourite to least favourite; the first one gets the maximum points. */
   ranking: string[];
   onChange: (ranking: string[]) => void;
+  /**
+   * Tasting mode: not every tapa has been served yet, so rows show their place (1º, 2º...)
+   * instead of points, which would still change as more tapas arrive.
+   */
+  positionsOnly?: boolean;
+  /** Private notes of this person, by team id. They never leave the phone. */
+  notes?: Record<string, string>;
+  onNoteChange?: (teamId: string, note: string) => void;
 }
 
 /**
  * The vote is a ranking: tap the tapas from favourite to least favourite to add them, then drag
  * (or use the arrows) to fine-tune. The position decides the points, from N-1 down to 1.
  */
-export function RankingBallot({ rivals, members, ranking, onChange }: RankingBallotProps) {
+export function RankingBallot({
+  rivals,
+  members,
+  ranking,
+  onChange,
+  positionsOnly = false,
+  notes,
+  onNoteChange
+}: RankingBallotProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
@@ -100,8 +116,22 @@ export function RankingBallot({ rivals, members, ranking, onChange }: RankingBal
         </div>
       )}
       {!team.description && team.ingredients.length === 0 && 'Este equipo no ha añadido más detalles.'}
+      {onNoteChange && (
+        <label className={styles.noteField}>
+          <span>Mi nota (solo la ves tú)</span>
+          <textarea
+            rows={2}
+            value={notes?.[team.id] ?? ''}
+            onChange={(e) => onNoteChange(team.id, e.target.value)}
+            placeholder="Qué te ha parecido, qué recordarás al votar..."
+          />
+        </label>
+      )}
     </div>
   );
+
+  const renderNotePreview = (team: Team) =>
+    notes?.[team.id]?.trim() ? <span className={styles.notePreview}>{notes[team.id]}</span> : null;
 
   const renderThumb = (team: Team) =>
     team.photoUrl ? (
@@ -115,13 +145,19 @@ export function RankingBallot({ rivals, members, ranking, onChange }: RankingBal
       {/* Ranked tapas */}
       <div className={styles.rankSection}>
         <div className={styles.rankSectionTitle}>
-          Tu ranking · {ranked.length} de {maxPoints}
+          {positionsOnly ? 'Tu ranking provisional' : 'Tu ranking'} · {ranked.length} de {maxPoints}
         </div>
 
         {ranked.length === 0 ? (
           <div className={styles.rankEmpty}>
-            Toca abajo tu tapa favorita para darle los <strong>{maxPoints} puntos</strong>, luego la segunda, y así
-            hasta la última.
+            {positionsOnly ? (
+              'Añade aquí cada tapa cuando la pruebes y colócala donde creas que va. Podrás cambiarlo hasta sellar tu voto.'
+            ) : (
+              <>
+                Toca abajo tu tapa favorita para darle los <strong>{maxPoints} puntos</strong>, luego la segunda, y así
+                hasta la última.
+              </>
+            )}
           </div>
         ) : (
           ranked.map((team, index) => {
@@ -160,8 +196,8 @@ export function RankingBallot({ rivals, members, ranking, onChange }: RankingBal
                   </button>
 
                   <span className={`${styles.rankPoints} ${previewIndex(index) === 0 ? styles.rankPointsTop : ''}`}>
-                    {points}
-                    <small>{points === 1 ? 'pt' : 'pts'}</small>
+                    {positionsOnly ? `${previewIndex(index) + 1}º` : points}
+                    {!positionsOnly && <small>{points === 1 ? 'pt' : 'pts'}</small>}
                   </span>
 
                   {renderThumb(team)}
@@ -175,6 +211,7 @@ export function RankingBallot({ rivals, members, ranking, onChange }: RankingBal
                     >
                       <span className={styles.rankDish}>{team.dishName || `Tapa de ${teamLabel(team, members)}`}</span>
                       <span className={styles.rankTeam}>{teamLabel(team, members)}</span>
+                      {renderNotePreview(team)}
                     </button>
                     <button
                       type="button"
@@ -218,8 +255,14 @@ export function RankingBallot({ rivals, members, ranking, onChange }: RankingBal
       {unranked.length > 0 && (
         <div className={styles.rankSection}>
           <div className={styles.rankSectionTitle}>
-            Por ordenar · toca la siguiente que más te gustó ({maxPoints - ranked.length}{' '}
-            {maxPoints - ranked.length === 1 ? 'punto' : 'puntos'})
+            {positionsOnly ? (
+              'Probadas y sin colocar'
+            ) : (
+              <>
+                Por ordenar · toca la siguiente que más te gustó ({maxPoints - ranked.length}{' '}
+                {maxPoints - ranked.length === 1 ? 'punto' : 'puntos'})
+              </>
+            )}
           </div>
 
           {unranked.map((team) => (
@@ -238,6 +281,7 @@ export function RankingBallot({ rivals, members, ranking, onChange }: RankingBal
                     <span className={styles.rankTeam}>
                       Tapa #{team.tastingOrder} · {teamLabel(team, members)}
                     </span>
+                    {renderNotePreview(team)}
                   </button>
                 </div>
 

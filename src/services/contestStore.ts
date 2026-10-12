@@ -533,7 +533,19 @@ export function useContest() {
   // Contest-specific Actions
   const setPhase = useCallback(
     (phase: ContestPhase) => {
-      updateCurrentContest((prev) => ({ ...prev, phase }));
+      updateCurrentContest((prev) => {
+        // Starting the tasting always opens with the first turn of the official order
+        if (phase === 'DEGUSTACION' && (prev.phase === 'CONFIGURACION' || prev.phase === 'SORTEO')) {
+          const first = [...prev.teams].sort((a, b) => a.tastingOrder - b.tastingOrder)[0];
+          return {
+            ...prev,
+            phase,
+            tastingServedUpTo: first?.tastingOrder ?? 0,
+            ...(first ? { activeTastingId: first.id } : {})
+          };
+        }
+        return { ...prev, phase };
+      });
     },
     [updateCurrentContest]
   );
@@ -635,7 +647,14 @@ export function useContest() {
 
   const setActiveTasting = useCallback(
     (teamId: string) => {
-      updateCurrentContest((prev) => ({ ...prev, activeTastingId: teamId }));
+      updateCurrentContest((prev) => {
+        const order = prev.teams.find((team) => team.id === teamId)?.tastingOrder ?? 0;
+        return {
+          ...prev,
+          activeTastingId: teamId,
+          tastingServedUpTo: Math.max(prev.tastingServedUpTo ?? 0, order)
+        };
+      });
     },
     [updateCurrentContest]
   );
@@ -890,6 +909,7 @@ export function useContest() {
       ...prev,
       phase: 'SORTEO',
       votes: {},
+      tastingServedUpTo: 0,
       gala: {
         currentVoterIndex: 0,
         step: 'ESPERANDO',

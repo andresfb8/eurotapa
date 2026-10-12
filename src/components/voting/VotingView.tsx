@@ -5,6 +5,7 @@ import { formatDrawDate } from '../../utils/dates';
 import { TapaEditModal } from './TapaEditModal';
 import { RankingBallot } from './RankingBallot';
 import { GalaCompanion } from './GalaCompanion';
+import { TastingCompanion } from './TastingCompanion';
 import { RulesModal } from '../RulesModal';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { AlertIcon, CheckIcon, LockIcon } from '../Icons';
@@ -20,6 +21,9 @@ interface VotingViewProps {
   drawDoneAt?: string;
   title: string;
   gala: GalaState;
+  /** Team whose tapa is on the TV during the tasting. */
+  activeTastingId?: string;
+  tastingServedUpTo?: number;
   onSubmitVote: (vote: VoteRecord) => void;
   onUpdateTeam: (team: Team) => void;
   onLogout?: () => void;
@@ -34,6 +38,8 @@ export function VotingView({
   drawDoneAt,
   title,
   gala,
+  activeTastingId,
+  tastingServedUpTo,
   onSubmitVote,
   onUpdateTeam,
   onLogout
@@ -88,6 +94,29 @@ export function VotingView({
       setRanking([]);
     }
   }, [draftKey]);
+
+  // Private tasting notes, by team id. Kept only on this phone, like the draft ranking.
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const notesKey = currentMember ? `eurotapa_tasting_notes_${currentMember.id}` : null;
+  useEffect(() => {
+    if (!notesKey) return;
+    try {
+      const stored = JSON.parse(localStorage.getItem(notesKey) || '{}');
+      setNotes(stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {});
+    } catch {
+      setNotes({});
+    }
+  }, [notesKey]);
+
+  const updateNote = (teamId: string, note: string) => {
+    const next = { ...notes, [teamId]: note };
+    setNotes(next);
+    try {
+      if (notesKey) localStorage.setItem(notesKey, JSON.stringify(next));
+    } catch {
+      // Notes are a convenience: tasting and voting still work without storage
+    }
+  };
 
   const updateRanking = (next: string[]) => {
     setRanking(next);
@@ -309,6 +338,21 @@ export function VotingView({
         />
       )}
 
+      {/* Tasting: follow the tapa on the table, take private notes and build the ranking as you go */}
+      {isTasting && (
+        <TastingCompanion
+          teams={teams}
+          members={members}
+          currentTeam={currentTeam}
+          activeTastingId={activeTastingId}
+          servedUpTo={tastingServedUpTo}
+          ranking={rankedIds}
+          onRankingChange={updateRanking}
+          notes={notes}
+          onNoteChange={updateNote}
+        />
+      )}
+
       {/* Secret Tapa Management Card (Editable by any member of the team) */}
       {!isGalaLive && (
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -411,16 +455,7 @@ export function VotingView({
 
       {/* Voting Section */}
       {!isAfterTasting ? (
-        isTasting ? (
-          /* Contest day: tasting in progress */
-          <div className="card" style={{ textAlign: 'center', padding: '36px 20px', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
-            <span className="badge badge-blue">Fase Actual: Degustación y Cata</span>
-            <h3 style={{ fontSize: '1.5rem' }}>Las votaciones se abrirán tras la cata</h3>
-            <p style={{ color: 'var(--text-muted)', maxWidth: '440px', fontSize: '14px' }}>
-              Cocina y sirve tu plato cuando llegue vuestro <strong>Turno #{currentTeam.tastingOrder}</strong>. En cuanto todos los comensales hayan probado todas las tapas, el organizador activará aquí el reparto de puntos estilo Eurovisión.
-            </p>
-          </div>
-        ) : isDrawDone ? (
+        isTasting ? null : isDrawDone ? (
           /* Before the contest day, draw already made: the team knows its turn and can prepare */
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
@@ -518,7 +553,14 @@ export function VotingView({
             </span>
           </div>
 
-          <RankingBallot rivals={rivals} members={members} ranking={rankedIds} onChange={updateRanking} />
+          <RankingBallot
+            rivals={rivals}
+            members={members}
+            ranking={rankedIds}
+            onChange={updateRanking}
+            notes={notes}
+            onNoteChange={updateNote}
+          />
 
           <button
             className="btn btn-primary"

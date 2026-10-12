@@ -170,6 +170,8 @@ export function App() {
           drawDoneAt={state.drawDoneAt}
           title={state.title}
           gala={state.gala}
+          activeTastingId={state.activeTastingId}
+          tastingServedUpTo={state.tastingServedUpTo}
           onSubmitVote={submitVote}
           onUpdateTeam={updateTeam}
           onLogout={logout}
