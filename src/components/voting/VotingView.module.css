@@ -358,3 +358,57 @@
   opacity: 0.3;
   cursor: not-allowed;
 }
+
+/* Gala companion: the phone as a second screen */
+.companionRank {
+  font-family: var(--font-serif);
+  font-size: 4rem;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.companionRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 6px 10px;
+  border-radius: var(--radius-xs);
+  font-size: 14px;
+  color: var(--text-body);
+}
+
+.companionRowOwn {
+  background-color: var(--pastel-blue-bg);
+  color: var(--pastel-blue-text);
+  font-weight: 600;
+}
+
+.companionNote {
+  background-color: var(--color-canvas);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--text-body);
+}
+
+.companionNoteLive {
+  background-color: var(--pastel-yellow-bg);
+  color: var(--pastel-yellow-text);
+}
+
+.companionNoteAward {
+  background-color: var(--pastel-green-bg);
+  color: var(--pastel-green-text);
+  animation: companionPop 420ms ease;
+}
+
+@keyframes companionPop {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .companionNoteAward {
+    animation: none;
+  }
+}

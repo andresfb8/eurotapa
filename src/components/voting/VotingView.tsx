@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Member, Team, VoteRecord, ContestPhase } from '../../types/contest';
+import { GalaState, Member, Team, VoteRecord, ContestPhase } from '../../types/contest';
 import { membersOfTeam, teamLabel } from '../../utils/teams';
 import { formatDrawDate } from '../../utils/dates';
 import { TapaEditModal } from './TapaEditModal';
 import { RankingBallot } from './RankingBallot';
+import { GalaCompanion } from './GalaCompanion';
 import { RulesModal } from '../RulesModal';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { AlertIcon, CheckIcon, LockIcon } from '../Icons';
@@ -17,6 +18,8 @@ interface VotingViewProps {
   phase: ContestPhase;
   /** ISO date when the official serving order was fixed; missing while the draw is pending. */
   drawDoneAt?: string;
+  title: string;
+  gala: GalaState;
   onSubmitVote: (vote: VoteRecord) => void;
   onUpdateTeam: (team: Team) => void;
   onLogout?: () => void;
@@ -29,6 +32,8 @@ export function VotingView({
   votes,
   phase,
   drawDoneAt,
+  title,
+  gala,
   onSubmitVote,
   onUpdateTeam,
   onLogout
@@ -250,7 +255,8 @@ export function VotingView({
 
   // Voting closes when the gala starts: a late vote would change the juries mid-reveal
   const isVotingOpen = phase === 'VOTACION';
-  const isAfterTasting = isVotingOpen || phase === 'GALA_TV' || phase === 'PODIO';
+  const isGalaLive = phase === 'GALA_TV' || phase === 'PODIO';
+  const isAfterTasting = isVotingOpen || isGalaLive;
   const isTasting = phase === 'DEGUSTACION';
   const isDrawDone = !!drawDoneAt;
   const drawDate = drawDoneAt ? formatDrawDate(drawDoneAt) : '';
@@ -290,7 +296,21 @@ export function VotingView({
         </div>
       </div>
 
+      {/* Gala night: the phone follows the TV with this person's own tapa in focus */}
+      {isGalaLive && (
+        <GalaCompanion
+          title={title}
+          teams={teams}
+          members={members}
+          votes={votes}
+          gala={gala}
+          phase={phase}
+          currentTeam={currentTeam}
+        />
+      )}
+
       {/* Secret Tapa Management Card (Editable by any member of the team) */}
+      {!isGalaLive && (
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
         <div className="flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
           <div className="flex items-center gap-2">
@@ -387,6 +407,7 @@ export function VotingView({
           <strong>Confidencialidad absoluta:</strong> El organizador y los demás participantes solo ven que la ficha del equipo está completada ({isProfileComplete ? 'Completada' : 'Pendiente'}), pero nadie verá el plato ni los ingredientes hasta que llegue el turno de cata en la TV.
         </p>
       </div>
+      )}
 
       {/* Voting Section */}
       {!isAfterTasting ? (
@@ -454,7 +475,7 @@ export function VotingView({
             </p>
           </div>
         )
-      ) : existingVote ? (
+      ) : existingVote && isGalaLive ? null : existingVote ? (
         /* If already voted: Show locked confirmation */
         <div className="card" style={{ textAlign: 'center', padding: '36px 20px', display: 'flex', flexDirection: 'column', gap: '14px', alignItems: 'center' }}>
           <div className="badge badge-green" style={{ fontSize: '13px', padding: '6px 16px' }}>
@@ -477,7 +498,7 @@ export function VotingView({
           <span className="badge badge-neutral">Votación cerrada</span>
           <h3 style={{ fontSize: '1.5rem' }}>La gala ya ha comenzado</h3>
           <p style={{ color: 'var(--text-muted)', maxWidth: '440px', fontSize: '14px' }}>
-            La votación se cerró al empezar la gala y tu voto no llegó a sellarse. Sigue los resultados en la pantalla de TV.
+            La votación se cerró al empezar la gala y tu voto no llegó a sellarse. Puedes seguir aquí arriba cómo va tu tapa.
           </p>
         </div>
       ) : (

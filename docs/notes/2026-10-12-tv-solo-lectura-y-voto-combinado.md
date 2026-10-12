@@ -70,6 +70,18 @@ que se sortee o se fije el orden actual.
 - **Empates totales**: comparten puesto (1º, 1º, 3º). Con 0 puntos no se comparte, para que
   el marcador no arranque con todas en primer lugar.
 
+## 5b. El móvil durante la gala (`GalaCompanion.tsx`)
+
+En `GALA_TV` y `PODIO` el portal del participante sustituye la ficha por una segunda
+pantalla centrada en su tapa. Solo usa lo que la TV ya ha revelado (`gala.revealedTapaIds`
+y los jurados anteriores a `currentVoterIndex`):
+
+- **Gala:** puesto y puntos en directo, distancia al puesto de arriba, jurados que faltan
+  por puntuarla, aviso "X te acaba de dar N puntos", aviso cuando su propio voto está en
+  pantalla, puntos recibidos por jurado y clasificación en directo.
+- **Podio:** puesto final, "mayor fan", puntos recibidos de cada jurado, el voto que emitió
+  su equipo, clasificación final y botón para copiar su resultado para WhatsApp.
+
 ## 6. Modo de pruebas (sandbox)
 
 `npm run dev:sandbox` (puerto 5174, modo Vite `sandbox`, `.env.sandbox`) arranca la app con

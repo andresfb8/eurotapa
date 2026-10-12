@@ -168,6 +168,8 @@ export function App() {
           votes={state.votes}
           phase={state.phase}
           drawDoneAt={state.drawDoneAt}
+          title={state.title}
+          gala={state.gala}
           onSubmitVote={submitVote}
           onUpdateTeam={updateTeam}
           onLogout={logout}
