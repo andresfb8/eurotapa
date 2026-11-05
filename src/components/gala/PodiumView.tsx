@@ -2,19 +2,23 @@ import { useState } from 'react';
 import { ScoreboardItem } from '../../types/contest';
 import { CheckIcon, CrownIcon } from '../Icons';
 import { Confetti } from '../Confetti';
+import { ConfirmDialog } from '../ConfirmDialog';
 import { FullscreenButton } from '../tv/TVShell';
 import tv from '../tv/TVStage.module.css';
 import styles from './PodiumView.module.css';
 
 interface PodiumViewProps {
   finalRanking: ScoreboardItem[];
+  /** Votes come from the test simulator, not from the participants. */
+  isSimulation?: boolean;
   /** False on the public TV screen: only the organizer can send the contest back to the start. */
   canControl: boolean;
   onRestart: () => void;
 }
 
-export function PodiumView({ finalRanking, canControl, onRestart }: PodiumViewProps) {
+export function PodiumView({ finalRanking, isSimulation = false, canControl, onRestart }: PodiumViewProps) {
   const [isCopied, setIsCopied] = useState(false);
+  const [isRestartConfirmOpen, setIsRestartConfirmOpen] = useState(false);
   const first = finalRanking[0];
   const second = finalRanking[1];
   const third = finalRanking[2];
@@ -66,8 +70,9 @@ export function PodiumView({ finalRanking, canControl, onRestart }: PodiumViewPr
   };
 
   return (
-    <div className={styles.podium}>
-      <Confetti count={70} />
+    <>
+      <div className={styles.podium}>
+        <Confetti count={70} />
 
       <div className={styles.main}>
         <div className={styles.heading}>
@@ -75,6 +80,11 @@ export function PodiumView({ finalRanking, canControl, onRestart }: PodiumViewPr
             <CrownIcon />
             {sharedFirst ? 'Empate en lo más alto' : 'Tenemos campeón'}
           </span>
+          {isSimulation && (
+            <span className={tv.pill} style={{ backgroundColor: 'var(--pastel-red-bg)', color: 'var(--pastel-red-text)' }}>
+              Simulación
+            </span>
+          )}
           <h1 className={styles.title}>El podio de EuroTapa</h1>
         </div>
 
@@ -106,13 +116,32 @@ export function PodiumView({ finalRanking, canControl, onRestart }: PodiumViewPr
           {canControl && (
             <>
               <FullscreenButton />
-              <button className="btn btn-secondary btn-sm" onClick={onRestart}>
-                Volver al inicio
+              <button className="btn btn-secondary btn-sm" onClick={() => setIsRestartConfirmOpen(true)}>
+                Reiniciar concurso
               </button>
             </>
           )}
         </div>
       </aside>
-    </div>
+      </div>
+
+      {isRestartConfirmOpen && (
+        <ConfirmDialog
+          title="¿Reiniciar el concurso?"
+          confirmLabel="Sí, reiniciar"
+          cancelLabel="Cancelar"
+          onConfirm={() => {
+            setIsRestartConfirmOpen(false);
+            onRestart();
+          }}
+          onCancel={() => setIsRestartConfirmOpen(false)}
+        >
+          <p>
+            Se borran todos los votos y la gala vuelve al sorteo. Las tapas, los equipos, las fichas y el
+            orden de salida se conservan.
+          </p>
+        </ConfirmDialog>
+      )}
+    </>
   );
 }

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { GalaState, Member, Team, VoteMode, VoteRecord, ContestPhase } from '../../types/contest';
 import { membersOfTeam, teamLabel } from '../../utils/teams';
+import { buildJuryVotes } from '../../utils/juries';
 import { formatDrawDate } from '../../utils/dates';
 import { TapaEditModal } from './TapaEditModal';
 import { RankingBallot } from './RankingBallot';
@@ -151,6 +152,13 @@ export function VotingView({
 
   // Has current member already submitted?
   const existingVote = currentMember ? votes[currentMember.id] : undefined;
+
+  // In combined mode the TV does not show this person's ballot: it shows the team's merged vote.
+  // Compute the same jury the gala will use so the phone can show exactly what will be revealed.
+  const combinedJury = useMemo(() => {
+    if (voteMode !== 'team' || !currentTeam) return undefined;
+    return buildJuryVotes(teams, members, votes, 'team').find((jury) => jury.teamId === currentTeam.id);
+  }, [voteMode, currentTeam, teams, members, votes]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -537,9 +545,43 @@ export function VotingView({
             Tus puntos están guardados. Los resultados se revelan en directo en la pantalla grande cuando empiece la gala, y aquí verás cómo va tu tapa.
           </p>
           {teamMembers.length > 1 && voteMode === 'team' && (
-            <p style={{ color: 'var(--text-muted)', maxWidth: '420px', fontSize: '14px' }}>
-              Tu reparto se suma al del resto de tu equipo para formar un único voto de vuestra tapa.
-            </p>
+            <div style={{ width: '100%', maxWidth: '440px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <p style={{ color: 'var(--text-muted)', fontSize: '14px', margin: 0 }}>
+                Tu reparto se suma al del resto de tu equipo y se reordena: la pantalla grande enseñará
+                este voto combinado, no las papeletas individuales.
+              </p>
+              {combinedJury && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <div
+                    className="mono"
+                    style={{ fontSize: '11px', letterSpacing: '0.06em', color: 'var(--text-muted)', textTransform: 'uppercase' }}
+                  >
+                    Voto combinado de vuestra tapa
+                  </div>
+                  {Object.entries(combinedJury.scores)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([teamId, points]) => {
+                      const rival = teams.find((team) => team.id === teamId);
+                      return (
+                        <div key={teamId} className={styles.companionRow} style={{ padding: '3px 0' }}>
+                          <span className="mono" style={{ width: '26px', flexShrink: 0, fontWeight: 800 }}>
+                            {points}
+                          </span>
+                          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {rival?.dishName || (rival ? `Tapa de ${teamLabel(rival, members)}` : 'Tapa')}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  {combinedJury.votedCount < combinedJury.memberCount && (
+                    <p style={{ color: 'var(--text-muted)', fontSize: '13px', margin: '4px 0 0' }}>
+                      Faltan {combinedJury.memberCount - combinedJury.votedCount} de tu equipo por votar: el
+                      reparto se completará con sus votos.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
       ) : !isVotingOpen ? (

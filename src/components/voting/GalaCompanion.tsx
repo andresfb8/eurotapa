@@ -110,6 +110,19 @@ export function GalaCompanion({
         })
     : [];
 
+  // No ballots yet: do not present an empty scoreboard as a final result
+  if (juries.length === 0) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: '28px 20px' }}>
+        <span className="badge badge-yellow">Gala en directo</span>
+        <h3 style={{ marginTop: '8px' }}>Esperando los primeros votos</h3>
+        <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>
+          La pantalla grande arrancará en cuanto haya una papeleta sellada.
+        </p>
+      </div>
+    );
+  }
+
   if (!mine) return null;
 
   const standings = (

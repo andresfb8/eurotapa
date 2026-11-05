@@ -50,6 +50,11 @@
   font-weight: 600;
 }
 
+.phaseTab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .statsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));

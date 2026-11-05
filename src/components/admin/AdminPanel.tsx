@@ -98,6 +98,8 @@ const GALA_MODES: { key: GalaMode; label: string; description: string }[] = [
 interface MemberRowProps {
   member: Member;
   hasVoted: boolean;
+  /** Reopening only makes sense while the ballot is open: during the gala it would delete the vote. */
+  canReopenVote: boolean;
   takenPins: Set<string>;
   copiedMemberId: string | null;
   onCopyLink: (member: Member) => void;
@@ -109,6 +111,7 @@ interface MemberRowProps {
 function MemberRow({
   member,
   hasVoted,
+  canReopenVote,
   takenPins,
   copiedMemberId,
   onCopyLink,
@@ -199,7 +202,7 @@ function MemberRow({
           ↻ PIN
         </button>
 
-        {hasVoted && (
+        {hasVoted && canReopenVote && (
           <button
             type="button"
             className="btn btn-secondary btn-sm"
@@ -246,6 +249,7 @@ export function AdminPanel({
   const [isTvLinkCopied, setIsTvLinkCopied] = useState(false);
   const [isAllLinksCopied, setIsAllLinksCopied] = useState(false);
   const [isReminderCopied, setIsReminderCopied] = useState(false);
+  const [isSimulateConfirmOpen, setIsSimulateConfirmOpen] = useState(false);
   const [scheduleStart, setScheduleStart] = useState('14:00');
   const [scheduleMinutes, setScheduleMinutes] = useState('15');
   const [isShuffling, setIsShuffling] = useState(false);
@@ -280,6 +284,9 @@ export function AdminPanel({
   const totalTeams = state.teams.length;
   const totalMembers = state.members.length;
   const votesReceivedCount = Object.keys(state.votes).length;
+  // Once a ballot is sealed the roster and the vote mode are frozen: changing them would make
+  // the points already handed out mean something different.
+  const hasVotes = votesReceivedCount > 0;
 
   const isLocal = isLocalOrigin();
   const publicBaseUrl = getPublicAppBaseUrl();
@@ -298,6 +305,10 @@ export function AdminPanel({
 
   const handleAddTeam = (e: React.FormEvent) => {
     e.preventDefault();
+    if (hasVotes) {
+      alert('Ya hay votos sellados. Reinicia la votación antes de añadir o quitar equipos.');
+      return;
+    }
     const names = newTeamNames
       .split(',')
       .map((n) => n.trim())
@@ -359,7 +370,7 @@ export function AdminPanel({
   const handleRemoveVote = (member: Member) => {
     if (
       window.confirm(
-        `¿Reabrir el voto de ${member.name}? Podrá volver a votar mientras la fase sea "Votación". Con la gala ya empezada su voto se pierde y no puede repetirlo.`
+        `¿Reabrir el voto de ${member.name}? Se borra su papeleta y podrá volver a votar mientras la fase siga siendo "Votación".`
       )
     ) {
       onRemoveVote(member.id);
@@ -427,6 +438,11 @@ export function AdminPanel({
           <div style={{ minWidth: 0 }}>
             <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
               <span className="badge badge-green">Superadmin</span>
+              {state.isSimulation && (
+                <span className="badge badge-yellow" title="Los votos actuales son de prueba, no de los participantes">
+                  Simulación
+                </span>
+              )}
               <label className="badge badge-neutral" style={{ gap: '6px' }} title="PIN para entrar al panel de este concurso (editable)">
                 PIN de organizador:
                 <input
@@ -610,7 +626,7 @@ export function AdminPanel({
           ))}
         </div>
         <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '10px' }}>
-          Cambiar de fase actualiza al momento la pantalla de TV y los móviles. Al pasar a la degustación se empieza por el turno 1, y al pasar a la gala la votación se cierra: quien no haya sellado su voto se queda fuera.
+          Cambiar de fase actualiza al momento la pantalla de TV y los móviles. Al pasar a la degustación se empieza por el turno 1; al entrar en la gala la votación se cierra (quien no haya sellado su voto se queda fuera) y el revelado arranca de nuevo por el primer jurado.
         </p>
       </div>
 
@@ -642,6 +658,8 @@ export function AdminPanel({
               key={m.key}
               className={`${styles.phaseTab} ${voteModeSetting === m.key ? styles.phaseTabActive : ''}`}
               onClick={() => onSetVoteMode(m.key)}
+              disabled={hasVotes}
+              title={hasVotes ? 'Ya hay votos sellados: reinicia la votación para cambiarlo' : undefined}
             >
               {m.label}
             </button>
@@ -655,7 +673,9 @@ export function AdminPanel({
             (evenTeams
               ? 'Se ha elegido solo porque todos los equipos tienen el mismo tamaño.'
               : 'Se ha elegido solo porque hay equipos de tamaños distintos.')}{' '}
-          Decídelo antes de empezar la gala.
+          {hasVotes
+            ? 'Ya hay votos sellados: el reparto queda congelado hasta que reinicies la votación.'
+            : 'Se fija con el primer voto sellado.'}
         </p>
         {voteMode === 'individual' && !evenTeams && (
           <p className="badge badge-yellow" style={{ marginTop: '8px', textTransform: 'none', letterSpacing: 0, padding: '8px 12px', borderRadius: 'var(--radius-sm)', fontSize: '13px' }}>
@@ -868,11 +888,29 @@ export function AdminPanel({
               Rellena votos al azar para todos y salta directo a la gala. Sustituye los votos que hubiera: úsalo solo para ensayar, nunca con el concurso en marcha.
             </p>
           </div>
-          <button className="btn btn-primary" onClick={onSimulateVotes}>
+          <button className="btn btn-primary" onClick={() => setIsSimulateConfirmOpen(true)}>
             Simular Votos y Abrir Gala
           </button>
         </div>
       </div>
+
+      {isSimulateConfirmOpen && (
+        <ConfirmDialog
+          title="¿Simular votos y abrir la gala?"
+          confirmLabel="Sí, simular"
+          cancelLabel="Cancelar"
+          onConfirm={() => {
+            setIsSimulateConfirmOpen(false);
+            onSimulateVotes();
+          }}
+          onCancel={() => setIsSimulateConfirmOpen(false)}
+        >
+          <p>
+            Se sustituyen los votos actuales por votos aleatorios y se salta directamente a la gala. Si
+            hay votos reales, se pierden y no se pueden recuperar. Úsalo solo para ensayar.
+          </p>
+        </ConfirmDialog>
+      )}
 
       {/* Teams Management */}
       <div className="card">
@@ -891,11 +929,22 @@ export function AdminPanel({
               type="text"
               className="input"
               style={{ padding: '6px 12px', fontSize: '13px', width: 'auto', flex: '1 1 180px', minWidth: 0 }}
-              placeholder="Ana, Luis, Marta (máx. 3, separados por comas)"
+              placeholder={
+                hasVotes
+                  ? 'Reinicia la votación para cambiar los equipos'
+                  : 'Ana, Luis, Marta (máx. 3, separados por comas)'
+              }
               value={newTeamNames}
               onChange={(e) => setNewTeamNames(e.target.value)}
+              disabled={hasVotes}
+              title={hasVotes ? 'Ya hay votos sellados: los equipos no pueden cambiar' : undefined}
             />
-            <button type="submit" className="btn btn-primary btn-sm">
+            <button
+              type="submit"
+              className="btn btn-primary btn-sm"
+              disabled={hasVotes}
+              title={hasVotes ? 'Ya hay votos sellados: los equipos no pueden cambiar' : undefined}
+            >
               <PlusIcon />
               Añadir Equipo
             </button>
@@ -959,7 +1008,12 @@ export function AdminPanel({
                             onRemoveTeam(state.id, team.id);
                           }
                         }}
-                        title="Eliminar equipo y sus votos"
+                        disabled={hasVotes}
+                        title={
+                          hasVotes
+                            ? 'Ya hay votos sellados: reinicia la votación para cambiar los equipos'
+                            : 'Eliminar equipo y sus votos'
+                        }
                       >
                         ✕
                       </button>
@@ -972,6 +1026,7 @@ export function AdminPanel({
                     key={member.id}
                     member={member}
                     hasVoted={!!state.votes[member.id]}
+                    canReopenVote={state.phase === 'VOTACION'}
                     takenPins={takenPins}
                     copiedMemberId={copiedMemberId}
                     onCopyLink={handleCopyParticipantLink}

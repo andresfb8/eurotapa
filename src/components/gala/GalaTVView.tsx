@@ -20,6 +20,8 @@ interface GalaTVViewProps {
   galaMode?: GalaMode;
   /** Whether each person or each team is a jury. */
   voteMode: VoteMode;
+  /** Votes come from the test simulator, not from the participants. */
+  isSimulation?: boolean;
   /** False on the public TV screen: reveals are driven only from the admin console. */
   canControl: boolean;
   onNextGalaStep: () => void;
@@ -38,6 +40,7 @@ export function GalaTVView({
   phase,
   galaMode,
   voteMode,
+  isSimulation = false,
   canControl,
   onNextGalaStep,
   onUndoGalaStep,
@@ -105,10 +108,40 @@ export function GalaTVView({
 
   const canUndo = (gala.history?.length ?? 0) > 0 || gala.currentVoterIndex > 0;
 
+  // No juries means no gala: without this the empty list would be painted as a podium where
+  // every tapa has 0 points.
+  if (votersList.length === 0) {
+    return (
+      <div
+        className={tv.screen}
+        style={{ gridTemplateRows: '1fr', placeContent: 'center', textAlign: 'center', padding: '4cqw', gap: '1.5cqh' }}
+      >
+        <span className={`${tv.pill} ${tv.pillLive}`}>Gala en directo</span>
+        {isSimulation && (
+          <span className={tv.pill} style={{ backgroundColor: 'var(--pastel-red-bg)', color: 'var(--pastel-red-text)' }}>
+            Simulación
+          </span>
+        )}
+        <h1 className={tv.bigTitle}>Todavía no hay votos</h1>
+        <p className={tv.lead} style={{ maxWidth: '48ch', margin: '0 auto' }}>
+          Abre la votación y espera a que los participantes sellen sus puntos. La gala empezará en cuanto
+          haya al menos una papeleta.
+        </p>
+      </div>
+    );
+  }
+
   // If in PODIO phase, show grand podium
   if (phase === 'PODIO' || gala.currentVoterIndex >= votersList.length) {
     const finalScoreboard = calculateScoreboard(teams, members, votes, voteMode);
-    return <PodiumView finalRanking={finalScoreboard} canControl={canControl} onRestart={onRestart} />;
+    return (
+      <PodiumView
+        finalRanking={finalScoreboard}
+        isSimulation={isSimulation}
+        canControl={canControl}
+        onRestart={onRestart}
+      />
+    );
   }
 
   const bulkSum = nextBulkScores
@@ -135,6 +168,11 @@ export function GalaTVView({
     <div className={styles.gala}>
       <div className={styles.topStrip}>
         <span className={`${tv.pill} ${tv.pillLive}`}>Gala en directo</span>
+        {isSimulation && (
+          <span className={tv.pill} style={{ backgroundColor: 'var(--pastel-red-bg)', color: 'var(--pastel-red-text)' }}>
+            Simulación
+          </span>
+        )}
 
         <div className={styles.juryCount}>
           Jurado {gala.currentVoterIndex + 1} de {votersList.length}

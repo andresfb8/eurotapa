@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { doc, onSnapshot, setDoc, deleteDoc, getDoc, deleteField } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc, deleteField } from 'firebase/firestore';
 import { db } from './firebase';
 import {
   ContestState,
+  GalaState,
   Member,
   Team,
   VoteRecord,
@@ -19,6 +20,7 @@ import { INITIAL_CONTEST_STATE } from './mockData';
 import { MASTER_PIN, generateUniquePin } from '../utils/pins';
 import { normalizeContest } from '../utils/contestMigration';
 import { buildJuryVotes, effectiveVoteMode } from '../utils/juries';
+import { shuffled } from '../utils/draw';
 
 /**
  * Sandbox (`npm run dev:sandbox`): the demo contest lives only in this browser and nothing is read
@@ -324,15 +326,103 @@ function cacheMultiLocal(data: MultiContestData): MultiContestData {
   return data;
 }
 
+/**
+ * A fresh gala state. The reveal index belongs to one specific list of juries, so every time the
+ * gala starts again (new contest, new votes, re-entry after the podium) it must begin from zero.
+ */
+function emptyGala(): GalaState {
+  return {
+    currentVoterIndex: 0,
+    step: 'ESPERANDO',
+    revealedTapaIds: [],
+    lastBatchIds: [],
+    history: []
+  };
+}
+
+function contestRef(contestId: string) {
+  return doc(db, 'concursos', contestId);
+}
+
+/**
+ * Votes are written one field at a time (`votes.<memberId>`). A full-document write merges nested
+ * maps, so a stale copy of the whole `votes` map can never delete a vote: it only rewrites the
+ * entries it carries. Deleting one vote therefore needs its own `deleteField()` write.
+ */
+function writeVoteToCloud(contestId: string, vote: VoteRecord): void {
+  if (IS_SANDBOX) return;
+  // `updateDoc` treats the dotted key as a field path and replaces that whole vote object, so a
+  // re-vote cannot leave scores from the previous ballot behind. Other members' votes are untouched.
+  updateDoc(contestRef(contestId), {
+    [`votes.${vote.voterId}`]: vote,
+    updatedAt: new Date().toISOString()
+  }).catch((err) => {
+    console.warn('No se pudo guardar el voto en Firestore:', err);
+  });
+}
+
+/** Removes a single sealed vote, which is what "reabrir voto" needs to do in Firestore. */
+function deleteVoteInCloud(contestId: string, memberId: string): void {
+  if (IS_SANDBOX) return;
+  updateDoc(contestRef(contestId), {
+    [`votes.${memberId}`]: deleteField(),
+    updatedAt: new Date().toISOString()
+  }).catch((err) => {
+    console.warn('No se pudo reabrir el voto en Firestore:', err);
+  });
+}
+
+/**
+ * Replaces the whole vote map (reset, simulation or removing a team). `mergeFields: ['votes']`
+ * patches that one field as a unit, so it replaces the map instead of merging member by member;
+ * and unlike `updateDoc`, it also creates the document if a brand-new contest has not synced yet.
+ */
+function replaceVotesInCloud(contestId: string, votes: Record<string, VoteRecord>): void {
+  if (IS_SANDBOX) return;
+  setDoc(
+    contestRef(contestId),
+    { votes, updatedAt: new Date().toISOString() },
+    { mergeFields: ['votes', 'updatedAt'] }
+  ).catch((err) => {
+    console.warn('No se pudo actualizar la votación en Firestore:', err);
+  });
+}
+
+/** Random vote used by the test simulation: same N-1 … 1 ballot a member would send. */
+function buildSampleVotes(contest: ContestState): Record<string, VoteRecord> {
+  const generatedVotes: Record<string, VoteRecord> = {};
+
+  contest.members.forEach((voter) => {
+    const rivals = contest.teams.filter((team) => team.id !== voter.teamId);
+    const scores: Record<string, number> = {};
+    // Same ballot the phone builds: the first rival gets (number of rivals) points, the last 1
+    shuffled(rivals.map((team) => team.id)).forEach((teamId, index) => {
+      scores[teamId] = rivals.length - index;
+    });
+    generatedVotes[voter.id] = {
+      voterId: voter.id,
+      voterName: voter.name,
+      scores,
+      submittedAt: new Date().toISOString()
+    };
+  });
+
+  return generatedVotes;
+}
+
 function syncMultiToCloud(data: MultiContestData): void {
   if (IS_SANDBOX) return;
   try {
     // Async sync active contest to Firestore
     const active = data.contests[data.activeContestId];
     if (active) {
-      const docRef = doc(db, 'concursos', active.id);
+      const docRef = contestRef(active.id);
+      // Votes are written on their own (see writeVoteToCloud): sending them here would let a stale
+      // local copy overwrite a vote that another phone has just sealed.
+      const contestWithoutVotes: Partial<ContestState> = { ...active };
+      delete contestWithoutVotes.votes;
       // `participants` is the legacy field kept by old documents: remove it so only teams/members remain.
-      const payload = { ...active, participants: deleteField() } as unknown as ContestState;
+      const payload = { ...contestWithoutVotes, participants: deleteField() } as unknown as ContestState;
       setDoc(docRef, payload, { merge: true }).catch((err) => {
         console.warn('Firestore active contest sync warning:', err);
       });
@@ -532,6 +622,9 @@ export function useContest() {
 
         const nextMulti: MultiContestData = {
           ...prev,
+          // Keep the edited contest as the one that gets synced, even if the cached active id had
+          // drifted from the session (a fresh device opening an access link).
+          activeContestId,
           contests: {
             ...prev.contests,
             [activeContestId]: updatedContest
@@ -548,17 +641,35 @@ export function useContest() {
   const setPhase = useCallback(
     (phase: ContestPhase) => {
       updateCurrentContest((prev) => {
+        // The way votes count has to be the same while ballots are cast and while the gala reveals
+        // them. `auto` is resolved with the first sealed ballot (see submitVote) and, as a last
+        // resort, when the gala starts, instead of drifting with later team changes.
+        const tallyLock =
+          phase === 'GALA_TV'
+            ? {
+                voteMode:
+                  prev.voteMode && prev.voteMode !== 'auto'
+                    ? prev.voteMode
+                    : effectiveVoteMode(prev.teams, prev.members, prev.voteMode)
+              }
+            : {};
+
+        // Every entry into the gala starts a new reveal: the previous index and the revealed ids
+        // belong to an older list of juries (votes may even have been reopened in between).
+        const galaReset = phase === 'GALA_TV' && prev.phase !== 'GALA_TV' ? { gala: emptyGala() } : {};
+
         // Starting the tasting always opens with the first turn of the official order
         if (phase === 'DEGUSTACION' && (prev.phase === 'CONFIGURACION' || prev.phase === 'SORTEO')) {
           const first = [...prev.teams].sort((a, b) => a.tastingOrder - b.tastingOrder)[0];
           return {
             ...prev,
             phase,
+            ...tallyLock,
             tastingServedUpTo: first?.tastingOrder ?? 0,
             ...(first ? { activeTastingId: first.id } : {})
           };
         }
-        return { ...prev, phase };
+        return { ...prev, phase, ...tallyLock, ...galaReset };
       });
     },
     [updateCurrentContest]
@@ -632,32 +743,51 @@ export function useContest() {
 
   const submitVote = useCallback(
     (vote: VoteRecord) => {
+      // Voting closes when the gala starts: do not even write the field
+      if (currentContest.phase !== 'VOTACION') return;
+
       updateCurrentContest((prev) => {
-        // Voting closes when the gala starts
         if (prev.phase !== 'VOTACION') return prev;
         return {
           ...prev,
+          // The first ballot fixes how every ballot counts, so the gala and the phones cannot
+          // disagree later because a team was added or removed in between.
+          voteMode:
+            prev.voteMode && prev.voteMode !== 'auto'
+              ? prev.voteMode
+              : effectiveVoteMode(prev.teams, prev.members, prev.voteMode),
           votes: {
             ...prev.votes,
             [vote.voterId]: vote
           }
         };
       });
+
+      // One field, so a vote cast on another phone at the same time is never overwritten
+      writeVoteToCloud(activeContestId, vote);
     },
-    [updateCurrentContest]
+    [activeContestId, currentContest.phase, updateCurrentContest]
   );
 
   /** Reopens a sealed vote so that member can vote again (e.g. they made a mistake). */
   const removeVote = useCallback(
     (memberId: string) => {
+      // With the gala already running, deleting a vote would shrink the jury list under the
+      // reveal index. Reopening is only allowed while the ballot is open.
+      if (currentContest.phase !== 'VOTACION') return;
+      if (!currentContest.votes[memberId]) return;
+
       updateCurrentContest((prev) => {
-        if (!prev.votes[memberId]) return prev;
+        if (prev.phase !== 'VOTACION' || !prev.votes[memberId]) return prev;
         const votes = { ...prev.votes };
         delete votes[memberId];
         return { ...prev, votes };
       });
+
+      // A plain map write with `merge` would keep the old field alive: delete it explicitly
+      deleteVoteInCloud(activeContestId, memberId);
     },
-    [updateCurrentContest]
+    [activeContestId, currentContest.phase, currentContest.votes, updateCurrentContest]
   );
 
   const setActiveTasting = useCallback(
@@ -676,7 +806,12 @@ export function useContest() {
 
   const setVoteMode = useCallback(
     (voteMode: VoteModeSetting) => {
-      updateCurrentContest((prev) => ({ ...prev, voteMode }));
+      updateCurrentContest((prev) => {
+        // Once a single ballot is sealed, changing how votes are counted would alter the result
+        // mid-contest. The organizer must reset the votes first.
+        if (Object.keys(prev.votes).length > 0) return prev;
+        return { ...prev, voteMode };
+      });
     },
     [updateCurrentContest]
   );
@@ -907,57 +1042,41 @@ export function useContest() {
   }, [updateCurrentContest]);
 
   const simulateSampleVotes = useCallback(() => {
-    updateCurrentContest((prev) => {
-      const generatedVotes: Record<string, VoteRecord> = {};
-      const rivalCount = Math.max(prev.teams.length - 1, 0);
+    const generatedVotes = buildSampleVotes(currentContest);
 
-      prev.members.forEach((voter) => {
-        const rivals = prev.teams.filter((team) => team.id !== voter.teamId);
-        const shuffled = [...rivals].sort(() => Math.random() - 0.5);
-
-        const scores: Record<string, number> = {};
-        shuffled.forEach((team, idx) => {
-          scores[team.id] = rivalCount - idx;
-        });
-
-        generatedVotes[voter.id] = {
-          voterId: voter.id,
-          voterName: voter.name,
-          scores,
-          submittedAt: new Date().toISOString()
-        };
-      });
-
-      return {
-        ...prev,
-        votes: generatedVotes,
-        phase: 'GALA_TV',
-        gala: {
-          currentVoterIndex: 0,
-          step: 'ESPERANDO',
-          revealedTapaIds: [],
-          lastBatchIds: [],
-          history: []
-        }
-      };
-    });
-  }, [updateCurrentContest]);
-
-  const resetContest = useCallback(() => {
     updateCurrentContest((prev) => ({
       ...prev,
-      phase: 'SORTEO',
-      votes: {},
-      tastingServedUpTo: 0,
-      gala: {
-        currentVoterIndex: 0,
-        step: 'ESPERANDO',
-        revealedTapaIds: [],
-        lastBatchIds: [],
-        history: []
-      }
+      votes: generatedVotes,
+      phase: 'GALA_TV',
+      isSimulation: true,
+      // The simulation fills every ballot, so the tally is already decided: freeze it too
+      voteMode:
+        prev.voteMode && prev.voteMode !== 'auto'
+          ? prev.voteMode
+          : effectiveVoteMode(prev.teams, prev.members, prev.voteMode),
+      gala: emptyGala()
     }));
-  }, [updateCurrentContest]);
+
+    replaceVotesInCloud(activeContestId, generatedVotes);
+  }, [activeContestId, currentContest, updateCurrentContest]);
+
+  const resetContest = useCallback(() => {
+    updateCurrentContest((prev) => {
+      const first = [...prev.teams].sort((a, b) => a.tastingOrder - b.tastingOrder)[0];
+      return {
+        ...prev,
+        phase: 'SORTEO',
+        votes: {},
+        isSimulation: false,
+        tastingServedUpTo: 0,
+        ...(first ? { activeTastingId: first.id } : {}),
+        gala: emptyGala()
+      };
+    });
+
+    // The full-document write deliberately carries no votes; clear the map explicitly
+    replaceVotesInCloud(activeContestId, {});
+  }, [activeContestId, updateCurrentContest]);
 
   // ==========================================
   // MULTI-CONTEST MANAGEMENT (FOR SUPERADMIN)
@@ -1086,38 +1205,71 @@ export function useContest() {
 
   const deleteContest = useCallback(
     (contestId: string) => {
+      const contestKeys = Object.keys(multiData.contests);
+      if (contestKeys.length <= 1) {
+        alert('No puedes eliminar el único concurso disponible.');
+        return;
+      }
+
+      const remaining = { ...multiData.contests };
+      delete remaining[contestId];
+      const nextDataActiveId =
+        multiData.activeContestId === contestId ? Object.keys(remaining)[0] : multiData.activeContestId;
+
       setMultiData((prev) => {
-        const contestKeys = Object.keys(prev.contests);
-        if (contestKeys.length <= 1) {
-          alert('No puedes eliminar el único concurso disponible.');
-          return prev;
-        }
-
-        const remaining = { ...prev.contests };
-        delete remaining[contestId];
-
-        const nextActiveId = prev.activeContestId === contestId ? Object.keys(remaining)[0] : prev.activeContestId;
-
-        const next: MultiContestData = {
-          activeContestId: nextActiveId,
-          contests: remaining
-        };
-
-        // Async remove from Firestore
-        if (!IS_SANDBOX) deleteDoc(doc(db, 'concursos', contestId)).catch(() => {});
-
-        return persistMultiData(next);
+        if (!prev.contests[contestId] || Object.keys(prev.contests).length <= 1) return prev;
+        const nextRemaining = { ...prev.contests };
+        delete nextRemaining[contestId];
+        const nextId =
+          prev.activeContestId === contestId ? Object.keys(nextRemaining)[0] : prev.activeContestId;
+        return persistMultiData({ activeContestId: nextId, contests: nextRemaining });
       });
+
+      // If the organizer was inside that contest, the session has to move with the data. Otherwise
+      // every later edit would target a contest that no longer exists and resurrect it.
+      setSession((prevSession) => {
+        if (!prevSession) return prevSession;
+        const opened = prevSession.adminContestIds ?? [prevSession.contestId];
+        if (prevSession.contestId !== contestId && !opened.includes(contestId)) return prevSession;
+
+        const nextContestId = prevSession.contestId === contestId ? nextDataActiveId : prevSession.contestId;
+        const nextIds = opened.filter((id) => id !== contestId);
+        const updated: UserSession = {
+          ...prevSession,
+          contestId: nextContestId,
+          ...(prevSession.role === 'superadmin'
+            ? { adminContestIds: nextIds.length > 0 ? nextIds : [nextContestId] }
+            : {})
+        };
+        try {
+          localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(updated));
+        } catch {
+          // ignore
+        }
+        return updated;
+      });
+
+      // Async remove from Firestore
+      if (!IS_SANDBOX) deleteDoc(contestRef(contestId)).catch(() => {});
     },
-    []
+    [multiData]
   );
 
   /** Adds a new tapa/team with 1-3 members to a contest. */
   const addTeamToContest = useCallback(
     (contestId: string, memberNames: string[]) => {
+      const current = multiData.contests[contestId];
+      if (!current) return;
+      // A new rival after the first ballot would get points nobody could give it
+      if (Object.keys(current.votes).length > 0) {
+        alert('Ya hay votos sellados. Reinicia la votación antes de añadir o quitar equipos.');
+        return;
+      }
+
       setMultiData((prev) => {
         const contest = prev.contests[contestId];
         if (!contest) return prev;
+        if (Object.keys(contest.votes).length > 0) return prev;
 
         const names = memberNames.map((name) => name.trim()).filter(Boolean).slice(0, 3);
         if (names.length === 0) return prev;
@@ -1161,22 +1313,28 @@ export function useContest() {
         return persistMultiData(next);
       });
     },
-    []
+    [multiData]
   );
 
   const removeTeamFromContest = useCallback(
     (contestId: string, teamId: string) => {
+      const current = multiData.contests[contestId];
+      if (!current) return;
+      if (current.teams.length <= 1) {
+        alert('No puedes eliminar el único equipo del concurso.');
+        return;
+      }
+      if (Object.keys(current.votes).length > 0) {
+        alert('Ya hay votos sellados. Reinicia la votación antes de añadir o quitar equipos.');
+        return;
+      }
+
+      const removedMemberIds = current.members.filter((m) => m.teamId === teamId).map((m) => m.id);
+
       setMultiData((prev) => {
         const contest = prev.contests[contestId];
         if (!contest) return prev;
-        if (contest.teams.length <= 1) {
-          alert('No puedes eliminar el único equipo del concurso.');
-          return prev;
-        }
-
-        const removedMemberIds = contest.members
-          .filter((m) => m.teamId === teamId)
-          .map((m) => m.id);
+        if (contest.teams.length <= 1 || Object.keys(contest.votes).length > 0) return prev;
 
         const teams = contest.teams
           .filter((team) => team.id !== teamId)
@@ -1209,8 +1367,11 @@ export function useContest() {
 
         return persistMultiData(next);
       });
+
+      // The normal full-document write carries no votes, so remove their fields explicitly
+      removedMemberIds.forEach((id) => deleteVoteInCloud(contestId, id));
     },
-    []
+    [multiData]
   );
 
   const updateContestMeta = useCallback(

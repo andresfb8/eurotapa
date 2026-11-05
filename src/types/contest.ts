@@ -112,6 +112,8 @@ export interface ContestState {
   galaMode?: GalaMode; // Defaults to CLASICA when missing (legacy contests)
   tvTheme?: TvTheme; // Defaults to light when missing
   voteMode?: VoteModeSetting; // Defaults to auto when missing
+  /** True while the votes in this contest come from the test simulator, not from real ballots. */
+  isSimulation?: boolean;
   createdAt?: string;
   updatedAt: string;
 }

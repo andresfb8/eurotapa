@@ -127,10 +127,11 @@ export function App() {
             phase={state.phase}
             galaMode={state.galaMode}
             voteMode={voteMode}
+            isSimulation={state.isSimulation}
             canControl={canControl}
             onNextGalaStep={nextGalaStep}
             onUndoGalaStep={undoGalaStep}
-            onRestart={() => setPhase('SORTEO')}
+            onRestart={resetContest}
           />
         );
     }
@@ -245,6 +246,7 @@ export function App() {
         role="superadmin"
         contestTitle={state.title}
         phase={state.phase}
+        isSimulation={state.isSimulation}
         adminTab={adminTab}
         onAdminTabChange={setAdminTab}
         onLogout={logout}
