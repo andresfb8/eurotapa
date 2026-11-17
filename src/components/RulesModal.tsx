@@ -117,8 +117,8 @@ const ORGANIZER: Item[] = [
     body: (
       <>
         Crea el concurso con un equipo por línea, cambia el PIN de organizador y apúntalo: es la única llave del panel.
-        Envía a cada persona su enlace, haz el sorteo (o fija un orden a mano) y compártelo. Las horas de cada turno son
-        opcionales.
+        Envía a cada persona su mensaje con su código y su enlace, haz el sorteo (o fija un orden a mano) y compártelo.
+        Las horas de cada turno son opcionales.
       </>
     )
   },

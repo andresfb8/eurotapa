@@ -1,12 +1,13 @@
 import { useState, ChangeEvent } from 'react';
 import { Member, Team } from '../../types/contest';
-import { membersOfTeam, teamLabel } from '../../utils/teams';
+import { teamLabel } from '../../utils/teams';
 import { compressImage } from '../../utils/imageCompressor';
 
 interface TapaEditModalProps {
   team: Team;
   members: Member[];
-  onSave: (updated: Team) => void;
+  /** `updated` is the ficha as this person leaves it; `original` is how it was when they opened it. */
+  onSave: (updated: Team, original: Team) => void;
   onClose: () => void;
 }
 
@@ -16,6 +17,9 @@ export function TapaEditModal({ team, members, onSave, onClose }: TapaEditModalP
   const [ingredientsText, setIngredientsText] = useState(team.ingredients.join(', '));
   const [photoUrl, setPhotoUrl] = useState(team.photoUrl || '');
   const [isCompressing, setIsCompressing] = useState(false);
+  // Snapshot of the ficha as it was when this person opened it: the diff against it decides what
+  // this save writes, so a change made meanwhile by another member of the team is never erased.
+  const [original] = useState<Team>(team);
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -40,13 +44,16 @@ export function TapaEditModal({ team, members, onSave, onClose }: TapaEditModalP
       .map((i) => i.trim())
       .filter((i) => i.length > 0);
 
-    onSave({
-      ...team,
-      dishName: dishName.trim(),
-      description: description.trim(),
-      ingredients: updatedIngredients,
-      photoUrl
-    });
+    onSave(
+      {
+        ...team,
+        dishName: dishName.trim(),
+        description: description.trim(),
+        ingredients: updatedIngredients,
+        photoUrl
+      },
+      original
+    );
     onClose();
   };
 
@@ -91,8 +98,15 @@ export function TapaEditModal({ team, members, onSave, onClose }: TapaEditModalP
         </div>
 
         <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
-          Cualquiera de los {membersOfTeam(team.id, members).length === 1 ? 'participantes' : 'miembros del equipo'} ({teamLabel(team, members)}) puede completar o corregir esta ficha.
+          La ficha es del equipo: cualquiera de sus miembros ({teamLabel(team, members)}) puede completarla o
+          corregirla. Se guarda solo lo que cambies tú, así que no pisas lo que haya escrito la otra persona.
         </p>
+
+        {team.lastEditedBy && (
+          <span className="badge badge-neutral" style={{ alignSelf: 'flex-start', textTransform: 'none' }}>
+            Última edición: {team.lastEditedBy}
+          </span>
+        )}
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div>

@@ -1,6 +1,18 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { doc, onSnapshot, setDoc, updateDoc, deleteDoc, getDoc, deleteField } from 'firebase/firestore';
+import {
+  doc,
+  onSnapshot,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  getDoc,
+  deleteField,
+  collection,
+  runTransaction,
+  FieldValue
+} from 'firebase/firestore';
 import { db } from './firebase';
+import { getCloudStatus, reportCloudFailure, reportCloudSuccess, subscribeCloudStatus } from './cloudStatus';
 import {
   ContestState,
   GalaState,
@@ -44,10 +56,11 @@ try {
 }
 
 /**
- * A participant device only knows its own contest, so it must never overwrite the global
- * contest registry (`app_meta/registry`) with that partial list.
+ * A participant device only knows its own contest, so it must never rewrite the global contest
+ * registry (`app_meta/registry`), nor the shared contest document: a stale copy of it would send
+ * the phase, the draw or the roster back in time for everybody.
  */
-let registryWritesEnabled = true;
+let deviceRole: UserRole | null = null;
 
 function loadInitialMultiData(): MultiContestData {
   try {
@@ -107,12 +120,14 @@ function loadStoredSession(): UserSession | null {
   return null;
 }
 
+/** Only the organizer's device owns the shared document; a phone only writes its own data. */
+deviceRole = loadStoredSession()?.role ?? null;
+
 // ==========================================
-// ACCESS LINKS (?c=<contestId>&pin=<pin>)
+// ACCESS LINKS (?c=<contestId> and role=tv)
 // ==========================================
 
 interface UrlAccessParams {
-  pin: string;
   role: string | null;
   contestId: string | null;
 }
@@ -124,18 +139,19 @@ const MISSING_CONTEST_ERROR =
 function readUrlAccessParams(): UrlAccessParams | null {
   if (typeof window === 'undefined' || !window.location.search) return null;
   const params = new URLSearchParams(window.location.search);
+  // `pin` / `code` belong to old links: they are never used to enter, only cleaned from the URL.
+  if (!URL_ACCESS_KEYS.some((key) => params.has(key))) return null;
   return {
-    pin: (params.get('pin') || params.get('code') || '').trim(),
     role: params.get('role'),
     contestId: params.get('c') || params.get('contest')
   };
 }
 
 function hasUrlAccessParams(params: UrlAccessParams | null): boolean {
-  return !!params && (!!params.pin || !!params.role || !!params.contestId);
+  return !!params && (!!params.role || !!params.contestId);
 }
 
-/** Removes the access params from the address bar so the PIN is not left visible nor re-used on reload. */
+/** Removes the access params from the address bar so they are not left visible nor re-used on reload. */
 function clearUrlAccessParams(): void {
   if (typeof window === 'undefined' || !window.location.search) return;
   const url = new URL(window.location.href);
@@ -224,76 +240,12 @@ async function resolveAccessFromUrl(
     };
   }
 
-  if (!params.pin) {
-    return {
-      multi,
-      session: storedSession,
-      error: requestedContestMissing ? MISSING_CONTEST_ERROR : null,
-      injectedContest
-    };
-  }
-
-  if (contest) {
-    const matched = contest.members.find((m) => m.pin === params.pin);
-    if (matched) {
-      return {
-        multi,
-        session: { role: 'participant', contestId: contest.id, participantId: matched.id },
-        error: null,
-        injectedContest
-      };
-    }
-    // Organizer: only the PIN of this very contest opens it
-    if (contest.adminPin === params.pin) {
-      return {
-        multi,
-        session: {
-          role: 'superadmin',
-          contestId: contest.id,
-          adminContestIds: adminContestIdsFor(multi, params.pin, contest.id)
-        },
-        error: null,
-        injectedContest
-      };
-    }
-    return {
-      multi,
-      session: null,
-      error: `El PIN ${params.pin} no pertenece a "${contest.title}". Pide a la organización que te reenvíe tu enlace.`,
-      injectedContest
-    };
-  }
-
-  const matches = Object.values(multi.contests).flatMap((c) => {
-    const member = c.members.find((m) => m.pin === params.pin);
-    return member ? [{ contest: c, member }] : [];
-  });
-
-  if (matches.length === 1) {
-    const match = matches[0];
-    return {
-      multi,
-      session: { role: 'participant', contestId: match.contest.id, participantId: match.member.id },
-      error: null,
-      injectedContest
-    };
-  }
-
-  if (matches.length > 1) {
-    return {
-      multi,
-      session: null,
-      error: 'Ese PIN existe en varios concursos. Elige tu concurso en la lista y vuelve a intentarlo.',
-      injectedContest
-    };
-  }
-
+  // The link only chooses the contest: entering always needs the code that travels in the
+  // WhatsApp message. Whatever session was already open on this device stays as it is.
   return {
     multi,
-    session: null,
-    error: requestedContestMissing
-      ? MISSING_CONTEST_ERROR
-      : 'Código no reconocido. Comprueba el código o solicita ayuda al organizador.',
+    session: storedSession,
+    error: requestedContestMissing ? MISSING_CONTEST_ERROR : null,
     injectedContest
   };
 }
@@ -302,7 +254,8 @@ async function resolveAccessFromUrl(
 // survives StrictMode's double effect invocation and the PIN leaves the address bar.
 const initialUrlAccessParams = readUrlAccessParams();
 const initialBootstrapRequested = hasUrlAccessParams(initialUrlAccessParams);
-if (initialBootstrapRequested) {
+if (initialUrlAccessParams) {
+  // Even an old link with a `pin` gets it removed from the address bar
   clearUrlAccessParams();
 }
 const initialBootstrapPromise: Promise<BootstrapResult> | null = initialBootstrapRequested
@@ -340,8 +293,40 @@ function emptyGala(): GalaState {
   };
 }
 
+/**
+ * Firestore does not accept nested arrays ("Nested arrays are not supported"), and the gala history
+ * is a list of clicks, each one holding the tapas revealed in that click. It travels as `"a|b"`
+ * strings and `normalizeGala()` splits it again when the document comes back.
+ */
+type CloudGala = Omit<GalaState, 'history'> & { history?: string[] };
+
+function serializeGala(gala: GalaState): CloudGala {
+  return {
+    ...gala,
+    history: (gala.history ?? []).map((batch) => batch.join('|'))
+  };
+}
+
 function contestRef(contestId: string) {
   return doc(db, 'concursos', contestId);
+}
+
+/**
+ * Drops every `undefined` property, recursively. Normalized contests describe their optional fields
+ * as `undefined`, and Firestore refuses to write a document that contains one of them
+ * ("Unsupported field value: undefined"), which used to make the whole sync fail in silence.
+ * `FieldValue` sentinels (`deleteField()`) are values, not documents: they must be kept as they are.
+ */
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((item) => stripUndefined(item)) as unknown as T;
+  if (value && typeof value === 'object' && !(value instanceof FieldValue)) {
+    const clean: Record<string, unknown> = {};
+    Object.entries(value as Record<string, unknown>).forEach(([key, entry]) => {
+      if (entry !== undefined) clean[key] = stripUndefined(entry);
+    });
+    return clean as T;
+  }
+  return value;
 }
 
 /**
@@ -356,9 +341,9 @@ function writeVoteToCloud(contestId: string, vote: VoteRecord): void {
   updateDoc(contestRef(contestId), {
     [`votes.${vote.voterId}`]: vote,
     updatedAt: new Date().toISOString()
-  }).catch((err) => {
-    console.warn('No se pudo guardar el voto en Firestore:', err);
-  });
+  })
+    .then(() => reportCloudSuccess('voto'))
+    .catch((err) => reportCloudFailure('No se pudo guardar tu voto en la nube', err));
 }
 
 /** Removes a single sealed vote, which is what "reabrir voto" needs to do in Firestore. */
@@ -367,9 +352,9 @@ function deleteVoteInCloud(contestId: string, memberId: string): void {
   updateDoc(contestRef(contestId), {
     [`votes.${memberId}`]: deleteField(),
     updatedAt: new Date().toISOString()
-  }).catch((err) => {
-    console.warn('No se pudo reabrir el voto en Firestore:', err);
-  });
+  })
+    .then(() => reportCloudSuccess('voto'))
+    .catch((err) => reportCloudFailure('No se pudo reabrir el voto en la nube', err));
 }
 
 /**
@@ -383,9 +368,73 @@ function replaceVotesInCloud(contestId: string, votes: Record<string, VoteRecord
     contestRef(contestId),
     { votes, updatedAt: new Date().toISOString() },
     { mergeFields: ['votes', 'updatedAt'] }
-  ).catch((err) => {
-    console.warn('No se pudo actualizar la votación en Firestore:', err);
-  });
+  )
+    .then(() => reportCloudSuccess('voto'))
+    .catch((err) => reportCloudFailure('No se pudo actualizar la votación en la nube', err));
+}
+
+/**
+ * The ficha is part of the `teams` array, and Firestore cannot address an array element by index:
+ * a dotted path such as `teams.0.dishName` is read as map keys and turns the whole array into a
+ * map, dropping every other team (that is exactly what happened once). It has to be read, patched
+ * and written back inside a transaction, finding the team by its id.
+ *
+ * Several people cook the same tapa and any of them can complete the ficha, so the write is merged
+ * field by field: only what this person actually changed is applied. If one writes the description
+ * while the other uploads the photo, neither erases the other's work.
+ */
+async function saveTeamFichaToCloud(
+  contestId: string,
+  team: Team,
+  baseline?: Team,
+  editorName?: string
+): Promise<void> {
+  if (IS_SANDBOX) return;
+  const ref = contestRef(contestId);
+  const sameValue = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  const touched = (field: keyof Team) => !baseline || !sameValue(team[field], baseline[field]);
+  const fichaFields: (keyof Team)[] = ['dishName', 'ingredients', 'description', 'photoUrl'];
+  const changedAny = !baseline || fichaFields.some((field) => touched(field));
+  if (!changedAny) return;
+
+  try {
+    await runTransaction(db, async (transaction) => {
+      const snapshot = await transaction.get(ref);
+      const current = snapshot.data() as Partial<ContestState> | undefined;
+      const teams = Array.isArray(current?.teams) ? (current.teams as Team[]) : [];
+      if (!teams.some((candidate) => candidate.id === team.id)) return;
+
+      const nextTeams = teams.map((candidate) => {
+        if (candidate.id !== team.id) return candidate;
+        const merged: Team = { ...candidate };
+        if (touched('dishName')) merged.dishName = team.dishName;
+        if (touched('ingredients')) merged.ingredients = team.ingredients;
+        if (touched('description')) merged.description = team.description;
+        if (touched('photoUrl')) merged.photoUrl = team.photoUrl ?? '';
+        merged.lastEditedBy = editorName ?? candidate.lastEditedBy;
+        merged.lastEditedAt = new Date().toISOString();
+        return merged;
+      });
+      transaction.update(ref, { teams: nextTeams, updatedAt: new Date().toISOString() });
+    });
+    reportCloudSuccess('ficha');
+  } catch (err) {
+    reportCloudFailure('No se pudo guardar la ficha en la nube', err);
+  }
+}
+
+/**
+ * A photo is a data URL of ~100-200 KB, and a Firestore document cannot exceed 1 MiB: nine photos
+ * inside the contest document would break every write. Each photo lives in its own document.
+ */
+function writeTeamPhotoToCloud(contestId: string, teamId: string, photoUrl: string): void {
+  if (IS_SANDBOX) return;
+  setDoc(doc(db, 'concursos', contestId, 'fotos', teamId), {
+    photoUrl,
+    updatedAt: new Date().toISOString()
+  })
+    .then(() => reportCloudSuccess('foto'))
+    .catch((err) => reportCloudFailure('No se pudo guardar la fotografía en la nube', err));
 }
 
 /** Random vote used by the test simulation: same N-1 … 1 ballot a member would send. */
@@ -412,6 +461,10 @@ function buildSampleVotes(contest: ContestState): Record<string, VoteRecord> {
 
 function syncMultiToCloud(data: MultiContestData): void {
   if (IS_SANDBOX) return;
+  // Only the organizer's device may rewrite the shared contest document and the global registry:
+  // a phone carries a partial, possibly stale copy of the contest.
+  if (deviceRole !== 'superadmin') return;
+
   try {
     // Async sync active contest to Firestore
     const active = data.contests[data.activeContestId];
@@ -422,27 +475,34 @@ function syncMultiToCloud(data: MultiContestData): void {
       const contestWithoutVotes: Partial<ContestState> = { ...active };
       delete contestWithoutVotes.votes;
       // `participants` is the legacy field kept by old documents: remove it so only teams/members remain.
-      const payload = { ...contestWithoutVotes, participants: deleteField() } as unknown as ContestState;
-      setDoc(docRef, payload, { merge: true }).catch((err) => {
-        console.warn('Firestore active contest sync warning:', err);
-      });
+      const payload = stripUndefined({
+        ...contestWithoutVotes,
+        // `history` is a list of lists: Firestore refuses nested arrays, so it travels flattened
+        gala: serializeGala(active.gala),
+        participants: deleteField()
+      }) as unknown as ContestState;
+      setDoc(docRef, payload, { merge: true })
+        .then(() => reportCloudSuccess('concurso'))
+        .catch((err) =>
+          reportCloudFailure('Los cambios del concurso no están llegando a la nube', err)
+        );
     }
 
-    // Also persist registry list (organiser devices only)
-    if (registryWritesEnabled) {
-      const registryRef = doc(db, 'app_meta', 'registry');
-      const contestSummaries = Object.values(data.contests).map((c) => ({
-        id: c.id,
-        title: c.title,
-        code: c.code || '',
-        phase: c.phase,
-        participantsCount: c.members.length,
-        updatedAt: c.updatedAt
-      }));
-      setDoc(registryRef, { contests: contestSummaries, activeContestId: data.activeContestId }, { merge: true }).catch(() => {});
-    }
+    // Also persist registry list
+    const registryRef = doc(db, 'app_meta', 'registry');
+    const contestSummaries = Object.values(data.contests).map((c) => ({
+      id: c.id,
+      title: c.title,
+      code: c.code || '',
+      phase: c.phase,
+      participantsCount: c.members.length,
+      updatedAt: c.updatedAt
+    }));
+    setDoc(registryRef, { contests: contestSummaries, activeContestId: data.activeContestId }, { merge: true })
+      .then(() => reportCloudSuccess('registro'))
+      .catch((err) => reportCloudFailure('No se pudo actualizar la lista de concursos', err));
   } catch (e) {
-    console.warn('Error syncing multi data to Firestore:', e);
+    reportCloudFailure('Los cambios del concurso no están llegando a la nube', e);
   }
 }
 
@@ -458,14 +518,33 @@ export function useContest() {
   const [remoteContests, setRemoteContests] = useState<RemoteContestSummary[]>([]);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [booting, setBooting] = useState<boolean>(() => !!initialBootstrapPromise);
+  const [cloudStatus, setCloudStatus] = useState(getCloudStatus);
+  /** Photos live outside the contest document (one per team) so it never reaches the 1 MiB limit. */
+  const [photos, setPhotos] = useState<Record<string, string>>({});
+
+  // Surface cloud write failures instead of letting them pass unnoticed
+  useEffect(() => subscribeCloudStatus(setCloudStatus), []);
 
   // Active contest is either from session contestId or activeContestId
   const activeContestId = session?.contestId || multiData.activeContestId;
   const currentContest = multiData.contests[activeContestId] || multiData.contests[multiData.activeContestId] || INITIAL_CONTEST_STATE;
 
+  // What the screens render: the contest plus the photos that live in their own documents
+  const displayContest = useMemo(() => {
+    if (Object.keys(photos).length === 0) return currentContest;
+    return {
+      ...currentContest,
+      teams: currentContest.teams.map((team) =>
+        photos[team.id] ? { ...team, photoUrl: photos[team.id] } : team
+      )
+    };
+  }, [currentContest, photos]);
+
   // Persist session changes
   const saveSession = useCallback((newSession: UserSession | null) => {
     setSession(newSession);
+    // What this device is allowed to write to the cloud depends on the role it is using
+    deviceRole = newSession?.role ?? null;
     try {
       if (newSession) {
         localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(newSession));
@@ -477,7 +556,8 @@ export function useContest() {
     }
   }, []);
 
-  // 0. Deep link bootstrap: resolve the contest and the session carried by the access URL
+  // 0. Deep link bootstrap: chooses the contest carried by the URL. The link never logs anybody
+  //    in: entering always needs the code that arrives in the private WhatsApp message.
   useEffect(() => {
     if (!initialBootstrapPromise) return;
     let cancelled = false;
@@ -528,11 +608,6 @@ export function useContest() {
     return () => {
       cancelled = true;
     };
-  }, [session]);
-
-  // 0c. Only organiser devices may rewrite the global contest registry
-  useEffect(() => {
-    registryWritesEnabled = session?.role !== 'participant';
   }, [session]);
 
   // Listeners: Firestore & Cross-Tab Broadcast & Window Storage
@@ -610,6 +685,36 @@ export function useContest() {
     };
   }, [activeContestId]);
 
+  // Photos of the fichas: one document per team, read live so the TV and the gala see them.
+  useEffect(() => {
+    if (IS_SANDBOX) {
+      setPhotos({});
+      return;
+    }
+    let unsubscribePhotos = () => {};
+    try {
+      unsubscribePhotos = onSnapshot(
+        collection(db, 'concursos', activeContestId, 'fotos'),
+        (snapshot) => {
+          const next: Record<string, string> = {};
+          snapshot.forEach((photoDoc) => {
+            const data = photoDoc.data();
+            if (typeof data.photoUrl === 'string' && data.photoUrl) {
+              next[photoDoc.id] = data.photoUrl;
+            }
+          });
+          setPhotos(next);
+        },
+        (error) => {
+          console.warn('No se pudieron leer las fotografías de las fichas:', error);
+        }
+      );
+    } catch (error) {
+      console.warn('Photo subscription error:', error);
+    }
+    return () => unsubscribePhotos();
+  }, [activeContestId]);
+
   // General Updater for the current contest
   const updateCurrentContest = useCallback(
     (updater: (prev: ContestState) => ContestState) => {
@@ -675,15 +780,41 @@ export function useContest() {
     [updateCurrentContest]
   );
 
-  /** Updates the ficha (dish data) of a team. Editable by any of its members. */
+  /**
+   * Updates the ficha (dish data) of a team. Any of its members can edit it: `baseline` is the
+   * ficha as it was when this person opened it, so only their own changes are written and they
+   * cannot overwrite what their teammate has just added.
+   */
   const updateTeam = useCallback(
-    (updatedTeam: Team) => {
+    (updatedTeam: Team, baseline?: Team) => {
+      const editorName =
+        session?.role === 'participant'
+          ? currentContest.members.find((member) => member.id === session.participantId)?.name
+          : undefined;
+      const photoChanged = !baseline || updatedTeam.photoUrl !== baseline.photoUrl;
+      const inlinePhoto =
+        photoChanged && updatedTeam.photoUrl?.startsWith('data:') ? updatedTeam.photoUrl : null;
+      // The photo never travels inside the contest document: it goes to its own document
+      const storedTeam: Team = updatedTeam.photoUrl?.startsWith('data:')
+        ? { ...updatedTeam, photoUrl: '' }
+        : updatedTeam;
+
+      if (inlinePhoto) {
+        // Show it at once, without waiting for the photo document to come back
+        setPhotos((prev) => ({ ...prev, [updatedTeam.id]: inlinePhoto }));
+        writeTeamPhotoToCloud(activeContestId, updatedTeam.id, inlinePhoto);
+      }
+
       updateCurrentContest((prev) => ({
         ...prev,
-        teams: prev.teams.map((team) => (team.id === updatedTeam.id ? updatedTeam : team))
+        teams: prev.teams.map((team) => (team.id === storedTeam.id ? storedTeam : team))
       }));
+
+      // The shared array is patched in a transaction: a phone only owns this ficha, not the
+      // phase, the draw or the rest of the teams.
+      void saveTeamFichaToCloud(activeContestId, storedTeam, baseline, editorName);
     },
-    [updateCurrentContest]
+    [activeContestId, currentContest, session, updateCurrentContest]
   );
 
   const updateMemberPin = useCallback(
@@ -1537,7 +1668,7 @@ export function useContest() {
 
   return {
     // Current contest state & actions
-    state: currentContest,
+    state: displayContest,
     setPhase,
     updateTeam,
     updateMemberPin,
@@ -1583,6 +1714,7 @@ export function useContest() {
     // Access link bootstrap
     booting,
     bootstrapError,
-    remoteContests
+    remoteContests,
+    cloudStatus
   };
 }

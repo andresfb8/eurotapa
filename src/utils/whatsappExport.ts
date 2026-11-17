@@ -2,6 +2,41 @@ import { Member, Team } from '../types/contest';
 import { teamLabel } from './teams';
 
 /**
+ * Ready-to-send private message for one participant: who it is for, the code they have to type and
+ * the link that opens the contest. The organizer copies this from the panel and pastes it in
+ * WhatsApp, so nobody has to guess their PIN.
+ */
+export function formatParticipantAccessMessage(
+  title: string,
+  memberName: string,
+  pin: string,
+  accessUrl: string
+): string {
+  let message = `🏆 *${title.toUpperCase()}* 🏆\n\n`;
+  message += `Hola ${memberName}: ya está abierto tu espacio del concurso.\n\n`;
+  message += `🔑 Tu código personal es *${pin}*\n\n`;
+  message += `👉 Abre este enlace y escribe tu código:\n${accessUrl}\n\n`;
+  message += `Guárdate este mensaje: el código es tuyo y sirve para entrar desde cualquier móvil.`;
+  return message;
+}
+
+/** The same message in a single list, to copy every access at once. */
+export function formatAllAccessMessages(
+  title: string,
+  members: { name: string; pin: string }[],
+  linkFor: (pin: string) => string
+): string {
+  const blocks = members.map(
+    (member) => `${member.name} — código *${member.pin}*\n${linkFor(member.pin)}`
+  );
+  let message = `🏆 *${title.toUpperCase()}* — ACCESOS PERSONALES\n\n`;
+  message += `Cada persona entra con su código en su propio enlace:\n\n`;
+  message += blocks.join('\n\n');
+  message += `\n\nNo compartas el código de otra persona: es su voto.`;
+  return message;
+}
+
+/**
  * Generates an elegant WhatsApp-friendly message with the tasting schedule.
  * Contains ONLY team names and time slots (no dish spoilers, keeping tapas secret!).
  */
@@ -43,7 +78,7 @@ export function formatVotingReminder(
   pendingNames.forEach((name) => {
     message += `• ${name}\n`;
   });
-  message += `\nEntrad con vuestro enlace u ordenad las tapas con vuestro PIN. La votación se cierra al empezar la gala:`;
+  message += `\nEntra en el concurso con tu código personal y sella tu voto antes de que empiece la gala:`;
   message += `\n${accessUrl}`;
   return message;
 }

@@ -49,6 +49,12 @@ export interface Team {
   photoUrl?: string;
   tastingOrder: number; // Order drawn in the raffle (1, 2, 3...)
   tastingTime?: string; // Estimated time (e.g. "14:30")
+  /**
+   * The ficha belongs to the team, not to a person: any of its members can complete it. These two
+   * fields remember who saved it last, so the others know the ficha is already being looked after.
+   */
+  lastEditedBy?: string;
+  lastEditedAt?: string;
 }
 
 /** A person: cooks in a team, has a personal PIN and casts one vote. */

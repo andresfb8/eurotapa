@@ -41,9 +41,12 @@ function buildUrl(params: Record<string, string>): string {
   return `${getPublicAppBaseUrl()}/?${new URLSearchParams(params).toString()}`;
 }
 
-/** Personal link that takes a participant straight into their own space. */
-export function buildParticipantLink(contestId: string, pin: string): string {
-  return buildUrl({ c: contestId, pin });
+/**
+ * Link that opens a contest's access screen. It never carries the PIN: the code travels in the
+ * private WhatsApp message, so a forwarded link is not enough to enter as somebody else.
+ */
+export function buildParticipantLink(contestId: string): string {
+  return buildUrl({ c: contestId });
 }
 
 /** Link that opens a contest directly in TV / projection mode. */

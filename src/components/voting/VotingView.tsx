@@ -28,7 +28,8 @@ interface VotingViewProps {
   activeTastingId?: string;
   tastingServedUpTo?: number;
   onSubmitVote: (vote: VoteRecord) => void;
-  onUpdateTeam: (team: Team) => void;
+  /** `original` is the ficha as it was opened, so only this person's changes are saved. */
+  onUpdateTeam: (team: Team, original: Team) => void;
   onLogout?: () => void;
 }
 
@@ -408,6 +409,13 @@ export function VotingView({
           Tu PIN: <span className="mono" style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{currentMember.pin}</span>
         </span>
       </div>
+
+      {currentTeam.lastEditedBy && (
+        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+          Ficha actualizada por <strong style={{ color: 'var(--text-body)' }}>{currentTeam.lastEditedBy}</strong>
+          {teamMembers.length > 1 ? ': entre los dos podéis editarla, se guarda lo que cambie cada uno.' : '.'}
+        </div>
+      )}
 
       <p style={{ fontSize: '13px', color: 'var(--text-muted)', backgroundColor: 'var(--color-canvas)', padding: '10px 12px', borderRadius: 'var(--radius-sm)', margin: 0 }}>
         <strong>Es secreta:</strong> la organización y el resto solo ven si la ficha está {isProfileComplete ? 'completa' : 'pendiente'}.

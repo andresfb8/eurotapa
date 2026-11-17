@@ -16,10 +16,16 @@ export function normalizeGala(raw: unknown): GalaState {
   const revealed = Array.isArray(gala.revealedTapaIds)
     ? gala.revealedTapaIds.filter(isNonEmptyString)
     : [];
-  const history = Array.isArray(gala.history)
-    ? gala.history
-        .filter(Array.isArray)
-        .map((batch) => batch.filter(isNonEmptyString))
+  // The history is a list of clicks. On this device it is `string[][]`, but Firestore refuses
+  // nested arrays, so in the cloud each click is stored as `"a|b"` (see `serializeGala`).
+  const rawHistory = Array.isArray(gala.history) ? (gala.history as unknown[]) : null;
+  const history = rawHistory
+    ? rawHistory
+        .map((batch) => {
+          if (Array.isArray(batch)) return batch.filter(isNonEmptyString);
+          if (typeof batch === 'string') return batch.split('|').filter(isNonEmptyString);
+          return [];
+        })
         .filter((batch) => batch.length > 0)
     : revealed.map((id) => [id]);
 
@@ -52,7 +58,9 @@ function normalizeTeam(raw: unknown, index: number): Team | null {
     photoUrl: isNonEmptyString(team.photoUrl) ? team.photoUrl : undefined,
     tastingOrder:
       typeof team.tastingOrder === 'number' && team.tastingOrder > 0 ? team.tastingOrder : index + 1,
-    tastingTime: isNonEmptyString(team.tastingTime) ? team.tastingTime : undefined
+    tastingTime: isNonEmptyString(team.tastingTime) ? team.tastingTime : undefined,
+    ...(isNonEmptyString(team.lastEditedBy) ? { lastEditedBy: team.lastEditedBy } : {}),
+    ...(isNonEmptyString(team.lastEditedAt) ? { lastEditedAt: team.lastEditedAt } : {})
   };
 }
 

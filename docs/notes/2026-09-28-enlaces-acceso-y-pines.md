@@ -1,5 +1,9 @@
 # Enlaces de acceso y política de PINs
 
+> **Actualización 2026-11-16:** el enlace personal ya no abre la sesión solo; selecciona el concurso
+> y pide el PIN, que viaja en el mensaje de WhatsApp. Ver
+> [2026-11-16-enlace-personal-con-pin-y-sync.md](./2026-11-16-enlace-personal-con-pin-y-sync.md).
+
 > Cambios aplicados el 2026-09-28. Archivos afectados: `src/utils/appUrl.ts`, `src/utils/pins.ts`,
 > `src/services/contestStore.ts`, `src/components/admin/AdminPanel.tsx`,
 > `src/components/admin/CreateContestModal.tsx`, `src/components/auth/LoginView.tsx`, `src/App.tsx`.

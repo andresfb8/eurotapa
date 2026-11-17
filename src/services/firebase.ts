@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore } from 'firebase/firestore';
 
 export const firebaseConfig = {
   apiKey: "AIzaSyB605S7wKgLvVFlXijzDlxawSeEFDeebrQ",
@@ -11,4 +11,20 @@ export const firebaseConfig = {
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-export const db = getFirestore(app);
+
+/**
+ * `ignoreUndefinedProperties` is not optional here. Every contest that comes back from
+ * `normalizeContest` carries its optional fields as `undefined` (`photoUrl`, `tastingTime`,
+ * `lastAwardedTapaId`, `createdAt`…), and Firestore rejects any document containing an
+ * `undefined` value with "Unsupported field value: undefined". Without this flag every
+ * full-document write (the draw, the phase, the fichas, the teams) failed silently and stayed
+ * only in the organizer's browser, while the participants kept reading the old document.
+ */
+export const db = (() => {
+  try {
+    return initializeFirestore(app, { ignoreUndefinedProperties: true });
+  } catch {
+    // Firestore was already initialized (hot reload): reuse that instance.
+    return getFirestore(app);
+  }
+})();

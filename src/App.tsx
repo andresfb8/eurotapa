@@ -64,6 +64,7 @@ export function App() {
     // Access link bootstrap
     booting,
     bootstrapError,
+    cloudStatus,
     remoteContests
   } = useContest();
 
@@ -256,6 +257,7 @@ export function App() {
         {adminTab === 'admin' ? (
           <AdminPanel
             state={state}
+            cloudStatus={cloudStatus}
             contests={adminContestsList}
             onUpdateAdminPin={(pin) => updateContestMeta(state.id, { adminPin: pin })}
             onSelectContest={switchContest}

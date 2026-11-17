@@ -2,19 +2,31 @@ import { useEffect, useState } from 'react';
 import { ContestState, GalaMode, Member, TvTheme, VoteModeSetting } from '../../types/contest';
 import { effectiveVoteMode, teamsAreEvenlySized } from '../../utils/juries';
 import { CreateContestModal } from './CreateContestModal';
-import { buildParticipantLink, buildTvLink, getPublicAppBaseUrl, isLocalOrigin } from '../../utils/appUrl';
+import {
+  buildParticipantLink,
+  buildTvLink,
+  getPublicAppBaseUrl,
+  isLocalOrigin
+} from '../../utils/appUrl';
 import { membersOfTeam, teamLabel } from '../../utils/teams';
-import { formatVotingReminder } from '../../utils/whatsappExport';
+import {
+  formatAllAccessMessages,
+  formatParticipantAccessMessage,
+  formatTastingScheduleForWhatsApp,
+  formatVotingReminder
+} from '../../utils/whatsappExport';
 import { MASTER_PIN, isValidAdminPin, isValidPin } from '../../utils/pins';
 import { formatDrawDate } from '../../utils/dates';
 import { runAnimatedDraw } from '../../utils/draw';
-import { formatTastingScheduleForWhatsApp } from '../../utils/whatsappExport';
+import { CloudStatus } from '../../services/cloudStatus';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { AlertIcon, CheckIcon, ClipboardIcon, ClockIcon, LockIcon, PlusIcon, TrashIcon } from '../Icons';
 import styles from './AdminPanel.module.css';
 
 interface AdminPanelProps {
   state: ContestState;
+  /** Cloud sync health: when a write fails, the phones are not seeing the changes. */
+  cloudStatus?: CloudStatus;
   contests: ContestState[];
   onSelectContest: (contestId: string) => void;
   onCreateContest: (
@@ -186,10 +198,10 @@ function MemberRow({
           className="btn btn-secondary btn-sm"
           style={{ fontSize: '11px', padding: '3px 8px' }}
           onClick={() => onCopyLink(member)}
-          title="Copiar enlace directo de acceso para enviar por WhatsApp"
+          title="Copiar el mensaje para WhatsApp con su código y su enlace"
         >
           {isCopied ? <CheckIcon /> : <ClipboardIcon />}
-          {isCopied ? 'Copiado' : 'Enlace'}
+          {isCopied ? 'Copiado' : 'Mensaje'}
         </button>
 
         <button
@@ -220,6 +232,7 @@ function MemberRow({
 
 export function AdminPanel({
   state,
+  cloudStatus,
   contests,
   onSelectContest,
   onCreateContest,
@@ -333,23 +346,32 @@ export function AdminPanel({
   };
 
   const handleCopyParticipantLink = (member: Member) => {
-    const link = buildParticipantLink(state.id, member.pin);
-    navigator.clipboard.writeText(link).then(() => {
+    const message = formatParticipantAccessMessage(
+      state.title,
+      member.name,
+      member.pin,
+      buildParticipantLink(state.id)
+    );
+    navigator.clipboard.writeText(message).then(() => {
       setCopiedMemberId(member.id);
       setTimeout(() => setCopiedMemberId(null), 2500);
     }).catch(() => {
-      prompt(`Copia este enlace para ${member.name}:`, link);
+      prompt(`Copia este mensaje y envíalo a ${member.name}:`, message);
     });
   };
 
   const handleCopyAllLinks = () => {
-    const lines = state.members.map((m) => `${m.name}: ${buildParticipantLink(state.id, m.pin)}`);
-    const text = `${state.title} — Enlaces de acceso\n\n${lines.join('\n')}`;
+    const link = buildParticipantLink(state.id);
+    const text = formatAllAccessMessages(
+      state.title,
+      state.members.map((m) => ({ name: m.name, pin: m.pin })),
+      () => link
+    );
     navigator.clipboard.writeText(text).then(() => {
       setIsAllLinksCopied(true);
       setTimeout(() => setIsAllLinksCopied(false), 2500);
     }).catch(() => {
-      prompt('Copia los enlaces de acceso:', text);
+      prompt('Copia los accesos (nombre, código y enlace):', text);
     });
   };
 
@@ -357,7 +379,8 @@ export function AdminPanel({
     const text = formatVotingReminder(
       state.title,
       pendingMembers.map((m) => m.name),
-      publicBaseUrl
+      // The reminder points at the contest, so nobody has to pick it from the list
+      buildParticipantLink(state.id)
     );
     navigator.clipboard.writeText(text).then(() => {
       setIsReminderCopied(true);
@@ -586,6 +609,29 @@ export function AdminPanel({
                   <strong>Este concurso usa el PIN por defecto ({MASTER_PIN}).</strong> Cualquiera que lo pruebe entra
                   como organizador: cámbialo arriba, en "PIN de organizador", y apúntalo. Es la única llave de este panel.
                 </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cloud sync warning: the organizer must know when the phones are not receiving the changes */}
+      {cloudStatus?.failing && (
+        <div className="card" style={{ backgroundColor: 'var(--pastel-red-bg)', borderColor: '#E8A49C' }}>
+          <div className="flex items-center gap-3">
+            <AlertIcon style={{ width: '20px', height: '20px', color: 'var(--pastel-red-text)', flexShrink: 0 }} />
+            <div>
+              <strong style={{ fontSize: '14px', color: 'var(--pastel-red-text)' }}>
+                Los cambios no están llegando a la nube
+              </strong>
+              <p style={{ fontSize: '13px', color: 'var(--pastel-red-text)', marginTop: '2px' }}>
+                El sorteo, la fase y las fichas siguen aquí, pero los móviles de los participantes no los verán.
+                Comprueba la conexión y recarga la página antes de seguir.
+              </p>
+              {cloudStatus.message && (
+                <p className="mono" style={{ fontSize: '11px', color: 'var(--pastel-red-text)', marginTop: '4px', opacity: 0.85 }}>
+                  {cloudStatus.message}
+                </p>
               )}
             </div>
           </div>
@@ -955,7 +1001,7 @@ export function AdminPanel({
         <div className="flex items-center gap-2" style={{ flexWrap: 'wrap', marginBottom: '14px', paddingBottom: '12px', borderBottom: '1px solid var(--border-subtle)' }}>
           <button type="button" className="btn btn-secondary btn-sm" onClick={handleCopyAllLinks}>
             {isAllLinksCopied ? <CheckIcon /> : <ClipboardIcon />}
-            {isAllLinksCopied ? 'Enlaces Copiados' : 'Copiar todos los enlaces'}
+            {isAllLinksCopied ? 'Accesos copiados' : 'Copiar todos los accesos (con código)'}
           </button>
           <button type="button" className="btn btn-secondary btn-sm" onClick={handleCopyReminder}>
             {isReminderCopied ? <CheckIcon /> : <ClockIcon />}

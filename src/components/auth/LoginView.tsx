@@ -125,7 +125,7 @@ export function LoginView({
             <div className={styles.pinLabel}>
               <span>Introduce tu PIN</span>
               <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '12px' }}>
-                El de tu enlace de acceso
+                El de tu mensaje de WhatsApp
               </span>
             </div>
 
