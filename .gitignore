@@ -25,3 +25,6 @@ dist-ssr
 
 # Firebase cache
 .firebase
+
+# TypeScript incremental build cache
+tsconfig.tsbuildinfo
