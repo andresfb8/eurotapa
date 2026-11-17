@@ -17,6 +17,10 @@ su nombre… y entonces el enlace volvía a ser la llave: quien lo recibiera pod
 
 - El enlace es solo `?c=<concurso>`: elige el concurso y nada más. Nunca identifica a nadie.
 - La pantalla de acceso pide el PIN y **no** muestra ningún código.
+- Abrir el enlace **siempre** arranca en la pantalla de acceso, aunque ese móvil ya tenga una sesión
+  de participante abierta: el código se pide en cada entrada desde WhatsApp. Abrir la web sin enlace
+  (el icono del móvil) sí recuerda a la persona, y pulsar "Salir" la olvida. La sesión del
+  organizador no se toca: el panel no se abre desde un enlace compartido.
 - El código viaja únicamente en el mensaje privado de WhatsApp, que genera el panel: nombre, código
   y enlace (`formatParticipantAccessMessage`). Los enlaces viejos con `?pin=` se ignoran: el
   parámetro se borra de la barra de direcciones y la persona tiene que teclear su código.
@@ -101,6 +105,8 @@ texto ni bloqueo. Para un equipo de 2-3 personas basta con que uno lleve la foto
    enlace `?c=…` **sin** PIN.
 3. Abrir ese enlace en una ventana de incógnito: pide el PIN, no enseña ningún código y no entra
    solo. Escribirlo y entrar.
+4. Volver a abrir el mismo enlace desde WhatsApp con la sesión abierta: debe pedir el PIN otra vez.
+   Abrir la web sin enlace: debe entrar directo (y "Salir" lo olvida).
 4. Entrar como participante, "Editar ficha y foto": guardar nombre, ingredientes, descripción y una
    foto. En Firestore: `teams` sigue siendo un array, la ficha está en su equipo y la foto en
    `concursos/{id}/fotos/{teamId}`.

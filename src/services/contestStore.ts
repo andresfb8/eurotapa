@@ -200,6 +200,12 @@ interface BootstrapResult {
   session: UserSession | null;
   error: string | null;
   injectedContest: boolean;
+  /**
+   * The link always starts on the access screen: it must not reuse a session already open on this
+   * phone, otherwise the code would only be asked the first time. Opening the web with no link
+   * (from the home screen) keeps remembering the person.
+   */
+  forceLogin: boolean;
 }
 
 async function resolveAccessFromUrl(
@@ -236,17 +242,21 @@ async function resolveAccessFromUrl(
       multi,
       session: { role: 'tv', contestId: contest?.id || multi.activeContestId },
       error: requestedContestMissing ? MISSING_CONTEST_ERROR : null,
-      injectedContest
+      injectedContest,
+      forceLogin: false
     };
   }
 
-  // The link only chooses the contest: entering always needs the code that travels in the
-  // WhatsApp message. Whatever session was already open on this device stays as it is.
+  // A personal link to a contest: the code is typed again, even if this phone was already inside.
+  // The organizer's session is left alone (the admin panel is not opened from a shared link).
+  const linkToContest = !!params.contestId && storedSession?.role === 'participant';
+
   return {
     multi,
-    session: storedSession,
+    session: linkToContest ? null : storedSession,
     error: requestedContestMissing ? MISSING_CONTEST_ERROR : null,
-    injectedContest
+    injectedContest,
+    forceLogin: linkToContest
   };
 }
 
@@ -557,7 +567,8 @@ export function useContest() {
   }, []);
 
   // 0. Deep link bootstrap: chooses the contest carried by the URL. The link never logs anybody
-  //    in: entering always needs the code that arrives in the private WhatsApp message.
+  //    in: entering always needs the code that arrives in the private WhatsApp message, even if
+  //    this phone was already inside from a previous visit.
   useEffect(() => {
     if (!initialBootstrapPromise) return;
     let cancelled = false;
@@ -569,7 +580,10 @@ export function useContest() {
         if (result.injectedContest) {
           cacheMultiLocal(result.multi);
         }
-        if (result.session) {
+        if (result.forceLogin) {
+          // Drops the remembered session so the access screen asks for the code again
+          saveSession(null);
+        } else if (result.session) {
           saveSession(result.session);
         }
         setBootstrapError(result.error);
